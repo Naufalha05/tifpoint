@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -16,21 +17,29 @@ import {
   PlusCircle,
   Edit,
   Trash,
-  AlertCircle
+  AlertCircle,
+  Upload
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [submissions, setSubmissions] = useState([]);
   const [users, setUsers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [recognizedCourses, setRecognizedCourses] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
+  const [filteredEvents, setFilteredEvents] = useState([]);
+  const [filteredCourses, setFilteredCourses] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [eventSearchQuery, setEventSearchQuery] = useState('');
+  const [courseSearchQuery, setCourseSearchQuery] = useState('');
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [rejectionComment, setRejectionComment] = useState('');
   const [approvalPoints, setApprovalPoints] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -40,49 +49,42 @@ export default function AdminDashboard() {
     rejectedSubmissions: 0
   });
 
-  // New state variables for managing activities and competencies
-  const [activities, setActivities] = useState([]);
-  const [competencies, setCompetencies] = useState([]);
-  const [filteredActivities, setFilteredActivities] = useState([]);
-  const [filteredCompetencies, setFilteredCompetencies] = useState([]);
-  const [activitySearchQuery, setActivitySearchQuery] = useState('');
-  const [competencySearchQuery, setCompetencySearchQuery] = useState('');
-  
-  // State for modal forms
-  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
-  const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
+  // Modal states for events and courses
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [deleteType, setDeleteType] = useState('');
 
-  // State for new/edit activity
-  const [activityFormData, setActivityFormData] = useState({
+  // Form states
+  const [eventFormData, setEventFormData] = useState({
     id: '',
     title: '',
-    type: '',
-    date: '',
-    points: '',
     description: '',
+    date: '',
+    location: '',
+    pointValue: '',
     isEditing: false
   });
 
-  // State for new/edit competency
-  const [competencyFormData, setCompetencyFormData] = useState({
+  const [courseFormData, setCourseFormData] = useState({
     id: '',
-    title: '',
-    description: '',
-    points: '',
+    name: '',
+    provider: '',
+    duration: '',
+    pointValue: '',
+    url: '',
     isEditing: false
   });
-  
+
+  // Base API URL
+  const API_BASE_URL = 'https://pweb-tifpoint-backend-production-1a28.up.railway.app';
+
   // Function to handle logout
   const handleLogout = () => {
     if (confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
-      // Clear token
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      
-      // Redirect to login page
       window.location.href = '/login';
     }
   };
@@ -92,173 +94,135 @@ export default function AdminDashboard() {
     setRefreshTrigger(prev => prev + 1);
   };
 
-  // Fetch data
+  // Get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+  };
+
+  // Fetch data from API
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        // Get token from localStorage
         const token = localStorage.getItem('token');
-        
         if (!token) {
           setError('Sesi login telah berakhir. Silakan login kembali.');
           setLoading(false);
           return;
         }
         
-        // Fetch submissions from correct API endpoint
-        const submissionsResponse = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activities', {
+        const headers = getAuthHeaders();
+
+        // Fetch submissions
+        const submissionsResponse = await fetch(`${API_BASE_URL}/submissions`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers
         });
         
         if (!submissionsResponse.ok) {
-          // Try to parse error as JSON, but handle non-JSON responses too
-          const contentType = submissionsResponse.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await submissionsResponse.json();
-            throw new Error(errorData.message || 'Failed to fetch submissions');
-          } else {
-            throw new Error(`Error: ${submissionsResponse.status} ${submissionsResponse.statusText}`);
-          }
+          throw new Error('Failed to fetch submissions');
         }
-        
         const submissionsData = await submissionsResponse.json();
         
-        // Fetch users from correct API endpoint
-        const usersResponse = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/users', {
+        // Fetch users (admin only)
+        const usersResponse = await fetch(`${API_BASE_URL}/users`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers
         });
         
-        if (!usersResponse.ok) {
-          const contentType = usersResponse.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await usersResponse.json();
-            throw new Error(errorData.message || 'Failed to fetch users');
-          } else {
-            throw new Error(`Error: ${usersResponse.status} ${usersResponse.statusText}`);
-          }
+        let usersData = [];
+        if (usersResponse.ok) {
+          usersData = await usersResponse.json();
+        } else {
+          console.warn('Failed to fetch users - might not have admin permissions');
         }
-        
-        const usersData = await usersResponse.json();
 
-        // Fetch activities from API
-        const activitiesResponse = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activity-info', {
+        // Fetch events
+        const eventsResponse = await fetch(`${API_BASE_URL}/events`, {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers
         });
-
-        if (!activitiesResponse.ok) {
-          const contentType = activitiesResponse.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await activitiesResponse.json();
-            console.warn('Failed to fetch activities info:', errorData);
-          } else {
-            console.warn(`Error fetching activities: ${activitiesResponse.status} ${activitiesResponse.statusText}`);
-          }
-        }
-
-        // Fetch competencies from API
-        const competenciesResponse = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/competencies', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!competenciesResponse.ok) {
-          const contentType = competenciesResponse.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await competenciesResponse.json();
-            console.warn('Failed to fetch competencies:', errorData);
-          } else {
-            console.warn(`Error fetching competencies: ${competenciesResponse.status} ${competenciesResponse.statusText}`);
-          }
-        }
         
-        // Transform data if needed to match component structure
-        const transformedSubmissions = Array.isArray(submissionsData.activities || submissionsData) 
-          ? (submissionsData.activities || submissionsData).map(sub => ({
-              id: sub._id,
-              nim: sub.nim || sub.studentId,
-              studentName: sub.studentName,
-              activityName: sub.activityName || sub.title,
-              date: sub.activityDate || sub.date,
-              description: sub.description,
+        if (!eventsResponse.ok) {
+          throw new Error('Failed to fetch events');
+        }
+        const eventsData = await eventsResponse.json();
+
+        // Fetch recognized courses
+        const coursesResponse = await fetch(`${API_BASE_URL}/recognized-courses`, {
+          method: 'GET',
+          headers
+        });
+        
+        if (!coursesResponse.ok) {
+          throw new Error('Failed to fetch recognized courses');
+        }
+        const coursesData = await coursesResponse.json();
+        
+        // Transform submissions data
+        const transformedSubmissions = Array.isArray(submissionsData) 
+          ? submissionsData.map(sub => ({
+              id: sub.id,
+              userId: sub.userId,
+              eventId: sub.eventId,
+              evidence: sub.evidence,
               status: sub.status || 'pending',
-              points: sub.points || 0,
-              proposedPoints: sub.proposedPoints || sub.expectedPoints || 0,
-              documentUrl: sub.documentUrl || sub.evidenceUrl,
-              comment: sub.feedback || sub.comment || '',
-              competencyArea: sub.competencyArea || '',
-              activityType: sub.activityType || ''
+              createdAt: sub.createdAt,
+              updatedAt: sub.updatedAt,
+              user: sub.user || {},
+              event: sub.event || {}
             }))
           : [];
         
-        const transformedUsers = Array.isArray(usersData.users || usersData)
-          ? (usersData.users || usersData).map(user => ({
-              id: user._id,
-              nim: user.nim || user.studentId,
-              name: user.name || user.fullName,
-              major: user.major || user.department || 'Teknik Informatika',
-              email: user.email
+        const transformedUsers = Array.isArray(usersData)
+          ? usersData.map(user => ({
+              id: user.id,
+              username: user.username,
+              email: user.email,
+              name: user.name,
+              nim: user.nim,
+              role: user.role,
+              createdAt: user.createdAt
             }))
           : [];
 
-        let transformedActivities = [];
-        try {
-          const activitiesData = await activitiesResponse.json();
-          transformedActivities = Array.isArray(activitiesData.activities || activitiesData)
-            ? (activitiesData.activities || activitiesData).map(activity => ({
-                id: activity._id,
-                title: activity.title || activity.activityName,
-                type: activity.type || activity.activityType,
-                date: activity.date || activity.activityDate,
-                points: activity.points || 0,
-                description: activity.description
-              }))
-            : [];
-        } catch (err) {
-          console.warn('Error parsing activities:', err);
-          transformedActivities = [];
-        }
+        const transformedEvents = Array.isArray(eventsData)
+          ? eventsData.map(event => ({
+              id: event.id,
+              title: event.title,
+              description: event.description,
+              date: event.date,
+              location: event.location,
+              pointValue: event.pointValue,
+              createdAt: event.createdAt
+            }))
+          : [];
 
-        let transformedCompetencies = [];
-        try {
-          const competenciesData = await competenciesResponse.json();
-          transformedCompetencies = Array.isArray(competenciesData.competencies || competenciesData)
-            ? (competenciesData.competencies || competenciesData).map(comp => ({
-                id: comp._id,
-                title: comp.title || comp.name,
-                description: comp.description,
-                points: comp.points || comp.pointsDescription || 'Nilai bervariasi'
-              }))
-            : [];
-        } catch (err) {
-          console.warn('Error parsing competencies:', err);
-          transformedCompetencies = [];
-        }
+        const transformedCourses = Array.isArray(coursesData)
+          ? coursesData.map(course => ({
+              id: course.id,
+              name: course.name,
+              provider: course.provider,
+              duration: course.duration,
+              pointValue: course.pointValue,
+              url: course.url,
+              createdAt: course.createdAt
+            }))
+          : [];
         
         setSubmissions(transformedSubmissions);
         setUsers(transformedUsers);
         setFilteredUsers(transformedUsers);
-        setActivities(transformedActivities);
-        setFilteredActivities(transformedActivities);
-        setCompetencies(transformedCompetencies);
-        setFilteredCompetencies(transformedCompetencies);
+        setEvents(transformedEvents);
+        setFilteredEvents(transformedEvents);
+        setRecognizedCourses(transformedCourses);
+        setFilteredCourses(transformedCourses);
         
         // Calculate statistics
         const pendingCount = transformedSubmissions.filter(sub => sub.status === 'pending').length;
@@ -284,84 +248,72 @@ export default function AdminDashboard() {
     fetchData();
   }, [refreshTrigger]);
 
-  // Filter users by NIM or name
+  // Filter users by search query
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredUsers(users);
     } else {
       const filtered = users.filter(user => 
-        user.nim.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.name.toLowerCase().includes(searchQuery.toLowerCase())
+        (user.nim && user.nim.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredUsers(filtered);
     }
   }, [searchQuery, users]);
 
-  // Filter activities by title or type
+  // Filter events by search query
   useEffect(() => {
-    if (activitySearchQuery.trim() === '') {
-      setFilteredActivities(activities);
+    if (eventSearchQuery.trim() === '') {
+      setFilteredEvents(events);
     } else {
-      const filtered = activities.filter(activity => 
-        activity.title.toLowerCase().includes(activitySearchQuery.toLowerCase()) ||
-        (activity.type && activity.type.toLowerCase().includes(activitySearchQuery.toLowerCase()))
+      const filtered = events.filter(event => 
+        event.title.toLowerCase().includes(eventSearchQuery.toLowerCase()) ||
+        (event.location && event.location.toLowerCase().includes(eventSearchQuery.toLowerCase()))
       );
-      setFilteredActivities(filtered);
+      setFilteredEvents(filtered);
     }
-  }, [activitySearchQuery, activities]);
+  }, [eventSearchQuery, events]);
 
-  // Filter competencies by title
+  // Filter courses by search query
   useEffect(() => {
-    if (competencySearchQuery.trim() === '') {
-      setFilteredCompetencies(competencies);
+    if (courseSearchQuery.trim() === '') {
+      setFilteredCourses(recognizedCourses);
     } else {
-      const filtered = competencies.filter(competency => 
-        competency.title.toLowerCase().includes(competencySearchQuery.toLowerCase())
+      const filtered = recognizedCourses.filter(course => 
+        course.name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+        course.provider.toLowerCase().includes(courseSearchQuery.toLowerCase())
       );
-      setFilteredCompetencies(filtered);
+      setFilteredCourses(filtered);
     }
-  }, [competencySearchQuery, competencies]);
+  }, [courseSearchQuery, recognizedCourses]);
 
   // Handle approving submission
   const handleApprove = async (submissionId) => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Get token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        throw new Error('Sesi login telah berakhir. Silakan login kembali.');
-      }
-      
-      // Validate points
       const points = parseInt(approvalPoints);
       if (isNaN(points) || points < 0) {
         throw new Error('Jumlah poin tidak valid. Masukkan angka yang valid.');
       }
       
-      // Send approval request to API
-      const response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activities/${submissionId}/approve`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+      // Note: This endpoint might need to be implemented on the backend
+      // Based on the API documentation, we might need to use PATCH /submissions/:id
+      const response = await fetch(`${API_BASE_URL}/submissions/${submissionId}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ 
+          status: 'approved',
           points: points,
           feedback: 'Pengajuan Anda telah disetujui dengan poin: ' + points
         })
       });
       
       if (!response.ok) {
-        // Try to parse error as JSON, but handle non-JSON responses too
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Gagal menyetujui pengajuan');
-        } else {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
+        const errorText = await response.text();
+        throw new Error(`Gagal menyetujui pengajuan: ${errorText}`);
       }
       
       // Update local data
@@ -371,6 +323,7 @@ export default function AdminDashboard() {
       
       setSubmissions(updatedSubmissions);
       setIsModalOpen(false);
+      setApprovalPoints('');
       
       // Update stats
       setStats({
@@ -379,12 +332,9 @@ export default function AdminDashboard() {
         pendingSubmissions: stats.pendingSubmissions - 1
       });
       
-      // Reset fields
-      setApprovalPoints('');
-      
       setLoading(false);
-      
-      // Refresh data after successful approval
+      setSuccess('Pengajuan berhasil disetujui!');
+      setTimeout(() => setSuccess(null), 3000);
       refreshData();
     } catch (error) {
       console.error('Error approving submission:', error);
@@ -397,45 +347,31 @@ export default function AdminDashboard() {
   const handleReject = async (submissionId) => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Get token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        throw new Error('Sesi login telah berakhir. Silakan login kembali.');
-      }
-      
-      // Validate comment
       if (!rejectionComment || rejectionComment.trim() === '') {
         throw new Error('Silakan berikan alasan penolakan');
       }
       
-      // Send rejection request to API
-      const response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activities/${submissionId}/reject`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+      // Note: This endpoint might need to be implemented on the backend
+      // Based on the API documentation, we might need to use PATCH /submissions/:id
+      const response = await fetch(`${API_BASE_URL}/submissions/${submissionId}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ 
+          status: 'rejected',
           feedback: rejectionComment 
         })
       });
       
       if (!response.ok) {
-        // Try to parse error as JSON, but handle non-JSON responses too
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Gagal menolak pengajuan');
-        } else {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
+        const errorText = await response.text();
+        throw new Error(`Gagal menolak pengajuan: ${errorText}`);
       }
       
       // Update local data
       const updatedSubmissions = submissions.map(sub => 
-        sub.id === submissionId ? {...sub, status: 'rejected', comment: rejectionComment} : sub
+        sub.id === submissionId ? {...sub, status: 'rejected', feedback: rejectionComment} : sub
       );
       
       setSubmissions(updatedSubmissions);
@@ -450,8 +386,8 @@ export default function AdminDashboard() {
       });
       
       setLoading(false);
-      
-      // Refresh data after successful rejection
+      setSuccess('Pengajuan berhasil ditolak!');
+      setTimeout(() => setSuccess(null), 3000);
       refreshData();
     } catch (error) {
       console.error('Error rejecting submission:', error);
@@ -460,322 +396,258 @@ export default function AdminDashboard() {
     }
   };
 
-  // Open modal with submission details
-  const openSubmissionModal = (submission) => {
-    setSelectedSubmission(submission);
-    
-    // Set initial points from the proposed points
-    if (submission.proposedPoints) {
-      setApprovalPoints(submission.proposedPoints.toString());
-    }
-    
-    setIsModalOpen(true);
-  };
-
-  // Handle opening activity form modal (for create or edit)
-  const openActivityModal = (activity = null) => {
-    if (activity) {
-      // Edit mode
-      setActivityFormData({
-        id: activity.id,
-        title: activity.title,
-        type: activity.type || '',
-        date: formatDateForInput(activity.date),
-        points: activity.points.toString(),
-        description: activity.description,
-        isEditing: true
-      });
-    } else {
-      // Create mode
-      setActivityFormData({
-        id: '',
-        title: '',
-        type: '',
-        date: '',
-        points: '',
-        description: '',
-        isEditing: false
-      });
-    }
-    setIsActivityModalOpen(true);
-  };
-
-  // Handle opening competency form modal (for create or edit)
-  const openCompetencyModal = (competency = null) => {
-    if (competency) {
-      // Edit mode
-      setCompetencyFormData({
-        id: competency.id,
-        title: competency.title,
-        description: competency.description,
-        points: competency.points,
-        isEditing: true
-      });
-    } else {
-      // Create mode
-      setCompetencyFormData({
-        id: '',
-        title: '',
-        description: '',
-        points: '',
-        isEditing: false
-      });
-    }
-    setIsCompetencyModalOpen(true);
-  };
-
-  // Handle opening delete confirmation modal
-  const openDeleteModal = (item, type) => {
-    setItemToDelete(item);
-    setDeleteType(type);
-    setIsDeleteModalOpen(true);
-  };
-
-  // Helper function to format date for input field
-  const formatDateForInput = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
-  };
-
-  // Handle form input changes for activity
-  const handleActivityFormChange = (e) => {
+  // Handle event form
+  const handleEventFormChange = (e) => {
     const { name, value } = e.target;
-    setActivityFormData(prev => ({
+    setEventFormData(prev => ({
       ...prev,
       [name]: value
     }));
   };
 
-  // Handle form input changes for competency
-  const handleCompetencyFormChange = (e) => {
+  // Handle course form
+  const handleCourseFormChange = (e) => {
     const { name, value } = e.target;
-    setCompetencyFormData(prev => ({
+    setCourseFormData(prev => ({
       ...prev,
       [name]: value
     }));
   };
 
-  // Handle saving activity (create or update)
-  const handleSaveActivity = async (e) => {
-    e.preventDefault();
+  // Save event
+  const handleSaveEvent = async () => {
     
     try {
       setLoading(true);
       
-      // Get token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        throw new Error('Sesi login telah berakhir. Silakan login kembali.');
-      }
-      
-      // Validate required fields
-      if (!activityFormData.title || !activityFormData.date || !activityFormData.points) {
+      if (!eventFormData.title || !eventFormData.date || !eventFormData.pointValue) {
         throw new Error('Judul, tanggal, dan poin harus diisi.');
       }
       
       const payload = {
-        title: activityFormData.title,
-        type: activityFormData.type,
-        date: activityFormData.date,
-        points: parseInt(activityFormData.points),
-        description: activityFormData.description
+        title: eventFormData.title,
+        description: eventFormData.description,
+        date: eventFormData.date,
+        location: eventFormData.location,
+        pointValue: parseInt(eventFormData.pointValue)
       };
       
       let response;
       
-      if (activityFormData.isEditing) {
-        // Update existing activity
-        response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activity-info/${activityFormData.id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+      if (eventFormData.isEditing) {
+        response = await fetch(`${API_BASE_URL}/events/${eventFormData.id}`, {
+          method: 'PATCH',
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload)
         });
       } else {
-        // Create new activity
-        response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activity-info', {
+        response = await fetch(`${API_BASE_URL}/events`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload)
         });
       }
       
       if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Gagal menyimpan kegiatan');
-        } else {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
+        throw new Error('Gagal menyimpan event');
       }
       
       // Reset form and close modal
-      setActivityFormData({
+      setEventFormData({
         id: '',
         title: '',
-        type: '',
-        date: '',
-        points: '',
         description: '',
+        date: '',
+        location: '',
+        pointValue: '',
         isEditing: false
       });
       
-      setIsActivityModalOpen(false);
+      setIsEventModalOpen(false);
       setLoading(false);
-      
-      // Refresh data
+      setSuccess('Event berhasil disimpan!');
+      setTimeout(() => setSuccess(null), 3000);
       refreshData();
       
     } catch (error) {
-      console.error('Error saving activity:', error);
-      setError(error.message || 'Gagal menyimpan kegiatan');
+      console.error('Error saving event:', error);
+      setError(error.message || 'Gagal menyimpan event');
       setLoading(false);
     }
   };
 
-  // Handle saving competency (create or update)
-  const handleSaveCompetency = async (e) => {
-    e.preventDefault();
-    
+  // Save recognized course
+  const handleSaveCourse = async () => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Get token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        throw new Error('Sesi login telah berakhir. Silakan login kembali.');
-      }
-      
-      // Validate required fields
-      if (!competencyFormData.title || !competencyFormData.description || !competencyFormData.points) {
-        throw new Error('Judul, deskripsi, dan informasi poin harus diisi.');
+      if (!courseFormData.name || !courseFormData.provider || !courseFormData.pointValue) {
+        throw new Error('Nama, provider, dan poin harus diisi.');
       }
       
       const payload = {
-        title: competencyFormData.title,
-        description: competencyFormData.description,
-        points: competencyFormData.points
+        name: courseFormData.name,
+        provider: courseFormData.provider,
+        duration: parseInt(courseFormData.duration) || 0,
+        pointValue: parseInt(courseFormData.pointValue),
+        url: courseFormData.url
       };
       
       let response;
       
-      if (competencyFormData.isEditing) {
-        // Update existing competency
-        response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/competencies/${competencyFormData.id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+      if (courseFormData.isEditing) {
+        response = await fetch(`${API_BASE_URL}/recognized-courses/${courseFormData.id}`, {
+          method: 'PATCH',
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload)
         });
       } else {
-        // Create new competency
-        response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/competencies', {
+        response = await fetch(`${API_BASE_URL}/recognized-courses`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload)
         });
       }
       
       if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Gagal menyimpan kompetensi');
-        } else {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
+        throw new Error('Gagal menyimpan course');
       }
       
       // Reset form and close modal
-      setCompetencyFormData({
+      setCourseFormData({
         id: '',
-        title: '',
-        description: '',
-        points: '',
+        name: '',
+        provider: '',
+        duration: '',
+        pointValue: '',
+        url: '',
         isEditing: false
       });
       
-      setIsCompetencyModalOpen(false);
+      setIsCourseModalOpen(false);
       setLoading(false);
-      
-      // Refresh data
+      setSuccess('Kursus berhasil disimpan!');
+      setTimeout(() => setSuccess(null), 3000);
       refreshData();
       
     } catch (error) {
-      console.error('Error saving competency:', error);
-      setError(error.message || 'Gagal menyimpan kompetensi');
+      console.error('Error saving course:', error);
+      setError(error.message || 'Gagal menyimpan course');
       setLoading(false);
     }
   };
 
-  // Handle delete confirmation
+  // Delete item
   const handleDeleteConfirm = async () => {
     try {
       setLoading(true);
-      
-      // Get token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        throw new Error('Sesi login telah berakhir. Silakan login kembali.');
-      }
+      setError(null);
       
       let endpoint;
-      
-      if (deleteType === 'activity') {
-        endpoint = `https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/activity-info/${itemToDelete.id}`;
-      } else if (deleteType === 'competency') {
-        endpoint = `https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/admin/competencies/${itemToDelete.id}`;
+      if (deleteType === 'event') {
+        endpoint = `${API_BASE_URL}/events/${itemToDelete.id}`;
+      } else if (deleteType === 'course') {
+        endpoint = `${API_BASE_URL}/recognized-courses/${itemToDelete.id}`;
+      } else if (deleteType === 'user') {
+        endpoint = `${API_BASE_URL}/users/${itemToDelete.id}`;
       } else {
-        throw new Error('Tipe data yang akan dihapus tidak valid');
+        throw new Error('Tipe item tidak valid');
       }
       
       const response = await fetch(endpoint, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: getAuthHeaders()
       });
       
       if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || `Gagal menghapus ${deleteType === 'activity' ? 'kegiatan' : 'kompetensi'}`);
-        } else {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
+        const errorText = await response.text();
+        throw new Error(`Gagal menghapus ${deleteType}: ${errorText}`);
       }
       
-      // Close modal
       setIsDeleteModalOpen(false);
       setItemToDelete(null);
       setDeleteType('');
       setLoading(false);
-      
-      // Refresh data
+      setSuccess(`${deleteType === 'event' ? 'Event' : deleteType === 'course' ? 'Kursus' : 'Pengguna'} berhasil dihapus!`);
+      setTimeout(() => setSuccess(null), 3000);
       refreshData();
       
     } catch (error) {
       console.error('Error deleting item:', error);
-      setError(error.message || `Gagal menghapus ${deleteType === 'activity' ? 'kegiatan' : 'kompetensi'}`);
+      setError(error.message || `Gagal menghapus ${deleteType === 'event' ? 'event' : 'course'}`);
       setLoading(false);
     }
+  };
+
+  // Open modals
+  const openSubmissionModal = (submission) => {
+    setSelectedSubmission(submission);
+    setError(null);
+    setSuccess(null);
+    setIsModalOpen(true);
+  };
+
+  const openEventModal = (event = null) => {
+    setError(null);
+    setSuccess(null);
+    if (event) {
+      setEventFormData({
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        date: event.date ? new Date(event.date).toISOString().split('T')[0] : '',
+        location: event.location,
+        pointValue: event.pointValue.toString(),
+        isEditing: true
+      });
+    } else {
+      setEventFormData({
+        id: '',
+        title: '',
+        description: '',
+        date: '',
+        location: '',
+        pointValue: '',
+        isEditing: false
+      });
+    }
+    setIsEventModalOpen(true);
+  };
+
+  const openCourseModal = (course = null) => {
+    setError(null);
+    setSuccess(null);
+    if (course) {
+      setCourseFormData({
+        id: course.id,
+        name: course.name,
+        provider: course.provider,
+        duration: course.duration.toString(),
+        pointValue: course.pointValue.toString(),
+        url: course.url,
+        isEditing: true
+      });
+    } else {
+      setCourseFormData({
+        id: '',
+        name: '',
+        provider: '',
+        duration: '',
+        pointValue: '',
+        url: '',
+        isEditing: false
+      });
+    }
+    setIsCourseModalOpen(true);
+  };
+
+  const openDeleteModal = (item, type) => {
+    setError(null);
+    setSuccess(null);
+    setItemToDelete(item);
+    setDeleteType(type);
+    setIsDeleteModalOpen(true);
   };
 
   // Render dashboard content
@@ -803,6 +675,19 @@ export default function AdminDashboard() {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-green-700">{success}</p>
               </div>
             </div>
           </div>
@@ -869,7 +754,7 @@ export default function AdminDashboard() {
                     className="bg-blue-500 rounded-t-lg w-full" 
                     style={{ height: `${(stats.totalSubmissions / Math.max(stats.totalSubmissions, 1)) * 100}%`, minHeight: '20px' }}
                   ></div>
-                  <p className="text-xs text-center mt-2">Total Pengajuan ({stats.totalSubmissions})</p>
+                  <p className="text-xs text-center mt-2">Total ({stats.totalSubmissions})</p>
                 </div>
                 <div className="w-1/4 mx-1">
                   <div 
@@ -906,8 +791,8 @@ export default function AdminDashboard() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NIM</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Kegiatan</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
@@ -917,9 +802,15 @@ export default function AdminDashboard() {
                 {pendingSubmissions.length > 0 ? (
                   pendingSubmissions.map((submission) => (
                     <tr key={submission.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{submission.nim}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{submission.activityName}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(submission.date).toLocaleDateString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {submission.user?.name || 'Unknown User'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {submission.event?.title || 'Unknown Event'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(submission.createdAt).toLocaleDateString()}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
                           Menunggu
@@ -937,7 +828,7 @@ export default function AdminDashboard() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
                       Tidak ada pengajuan yang menunggu verifikasi
                     </td>
                   </tr>
@@ -950,7 +841,7 @@ export default function AdminDashboard() {
     );
   };
 
-  // Render users management content
+  // Render users content
   const renderUsersContent = () => {
     return (
       <div className="bg-white rounded-lg shadow">
@@ -968,7 +859,7 @@ export default function AdminDashboard() {
           <div className="mt-4 relative">
             <input
               type="text"
-              placeholder="Cari berdasarkan NIM atau nama..."
+              placeholder="Cari berdasarkan NIM, nama, atau email..."
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1002,25 +893,47 @@ export default function AdminDashboard() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NIM</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program Studi</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NIM</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredUsers.length > 0 ? (
                   filteredUsers.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.nim}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.username}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.major}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.nim || '-'}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          user.role === 'ADMIN' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {user.role !== 'ADMIN' && (
+                          <button 
+                            onClick={() => openDeleteModal(user, 'user')}
+                            className="text-red-600 hover:text-red-900"
+                            title="Hapus User"
+                          >
+                            <Trash className="h-5 w-5" />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
                       {searchQuery ? 'Tidak ada pengguna yang sesuai dengan pencarian' : 'Tidak ada data pengguna'}
                     </td>
                   </tr>
@@ -1033,13 +946,13 @@ export default function AdminDashboard() {
     );
   };
 
-  // Render verification management content
+  // Render verification content
   const renderVerificationContent = () => {
     return (
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Verifikasi Kegiatan</h2>
+            <h2 className="text-lg font-semibold">Verifikasi Pengajuan</h2>
             <button 
               onClick={refreshData}
               className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300"
@@ -1073,11 +986,10 @@ export default function AdminDashboard() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NIM</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Kegiatan</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal Submit</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Poin</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                 </tr>
               </thead>
@@ -1085,9 +997,15 @@ export default function AdminDashboard() {
                 {submissions.length > 0 ? (
                   submissions.map((submission) => (
                     <tr key={submission.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{submission.nim}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{submission.activityName}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(submission.date).toLocaleDateString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {submission.user?.name || 'Unknown User'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {submission.event?.title || 'Unknown Event'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(submission.createdAt).toLocaleDateString()}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {submission.status === 'pending' && (
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
@@ -1106,9 +1024,6 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {submission.status === 'approved' ? submission.points : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <button 
                           onClick={() => openSubmissionModal(submission)}
                           className="text-indigo-600 hover:text-indigo-900 font-medium"
@@ -1120,7 +1035,7 @@ export default function AdminDashboard() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
                       Tidak ada data pengajuan
                     </td>
                   </tr>
@@ -1133,14 +1048,14 @@ export default function AdminDashboard() {
     );
   };
 
-  // Render activities management content
-  const renderActivitiesContent = () => {
+  // Render events content
+  const renderEventsContent = () => {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-lg font-semibold">Manajemen Info Kegiatan</h2>
+              <h2 className="text-lg font-semibold">Manajemen Event</h2>
               <div className="flex gap-2">
                 <button 
                   onClick={refreshData}
@@ -1150,21 +1065,21 @@ export default function AdminDashboard() {
                   Refresh
                 </button>
                 <button 
-                  onClick={() => openActivityModal()}
+                  onClick={() => openEventModal()}
                   className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-300"
                 >
                   <PlusCircle className="h-4 w-4 mr-2" />
-                  Tambah Kegiatan
+                  Tambah Event
                 </button>
               </div>
             </div>
             <div className="mt-4 relative">
               <input
                 type="text"
-                placeholder="Cari berdasarkan judul atau tipe kegiatan..."
+                placeholder="Cari berdasarkan judul atau lokasi..."
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={activitySearchQuery}
-                onChange={(e) => setActivitySearchQuery(e.target.value)}
+                value={eventSearchQuery}
+                onChange={(e) => setEventSearchQuery(e.target.value)}
               />
               <div className="absolute left-3 top-3 text-gray-400">
                 <Search size={18} />
@@ -1196,33 +1111,35 @@ export default function AdminDashboard() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judul</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipe</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lokasi</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Poin</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deskripsi</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredActivities.length > 0 ? (
-                    filteredActivities.map((activity) => (
-                      <tr key={activity.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{activity.title}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{activity.type || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(activity.date).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{activity.points}</td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{activity.description}</td>
+                  {filteredEvents.length > 0 ? (
+                    filteredEvents.map((event) => (
+                      <tr key={event.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{event.title}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(event.date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.location || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.pointValue}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{event.description}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="flex space-x-2">
                             <button 
-                              onClick={() => openActivityModal(activity)}
+                              onClick={() => openEventModal(event)}
                               className="text-blue-600 hover:text-blue-900"
                               title="Edit"
                             >
                               <Edit className="h-5 w-5" />
                             </button>
                             <button 
-                              onClick={() => openDeleteModal(activity, 'activity')}
+                              onClick={() => openDeleteModal(event, 'event')}
                               className="text-red-600 hover:text-red-900"
                               title="Hapus"
                             >
@@ -1235,7 +1152,7 @@ export default function AdminDashboard() {
                   ) : (
                     <tr>
                       <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
-                        {activitySearchQuery ? 'Tidak ada kegiatan yang sesuai dengan pencarian' : 'Tidak ada data kegiatan'}
+                        {eventSearchQuery ? 'Tidak ada event yang sesuai dengan pencarian' : 'Tidak ada data event'}
                       </td>
                     </tr>
                   )}
@@ -1248,14 +1165,14 @@ export default function AdminDashboard() {
     );
   };
 
-  // Render competencies management content
-  const renderCompetenciesContent = () => {
+  // Render courses content
+  const renderCoursesContent = () => {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-lg font-semibold">Manajemen Info Kompetensi</h2>
+              <h2 className="text-lg font-semibold">Manajemen Kursus Terakreditasi</h2>
               <div className="flex gap-2">
                 <button 
                   onClick={refreshData}
@@ -1265,21 +1182,21 @@ export default function AdminDashboard() {
                   Refresh
                 </button>
                 <button 
-                  onClick={() => openCompetencyModal()}
+                  onClick={() => openCourseModal()}
                   className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all duration-300"
                 >
                   <PlusCircle className="h-4 w-4 mr-2" />
-                  Tambah Kompetensi
+                  Tambah Kursus
                 </button>
               </div>
             </div>
             <div className="mt-4 relative">
               <input
                 type="text"
-                placeholder="Cari berdasarkan judul kompetensi..."
+                placeholder="Cari berdasarkan nama atau provider..."
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={competencySearchQuery}
-                onChange={(e) => setCompetencySearchQuery(e.target.value)}
+                value={courseSearchQuery}
+                onChange={(e) => setCourseSearchQuery(e.target.value)}
               />
               <div className="absolute left-3 top-3 text-gray-400">
                 <Search size={18} />
@@ -1310,30 +1227,40 @@ export default function AdminDashboard() {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judul</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deskripsi</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Informasi Poin</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durasi</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Poin</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredCompetencies.length > 0 ? (
-                    filteredCompetencies.map((competency) => (
-                      <tr key={competency.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{competency.title}</td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{competency.description}</td>
-                        <td className="px-6 py-4 text-sm text-gray-500">{competency.points}</td>
+                  {filteredCourses.length > 0 ? (
+                    filteredCourses.map((course) => (
+                      <tr key={course.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{course.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{course.provider}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{course.duration} jam</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{course.pointValue}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {course.url ? (
+                            <a href={course.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+                              Link
+                            </a>
+                          ) : '-'}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="flex space-x-2">
                             <button 
-                              onClick={() => openCompetencyModal(competency)}
+                              onClick={() => openCourseModal(course)}
                               className="text-blue-600 hover:text-blue-900"
                               title="Edit"
                             >
                               <Edit className="h-5 w-5" />
                             </button>
                             <button 
-                              onClick={() => openDeleteModal(competency, 'competency')}
+                              onClick={() => openDeleteModal(course, 'course')}
                               className="text-red-600 hover:text-red-900"
                               title="Hapus"
                             >
@@ -1345,8 +1272,8 @@ export default function AdminDashboard() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
-                        {competencySearchQuery ? 'Tidak ada kompetensi yang sesuai dengan pencarian' : 'Tidak ada data kompetensi'}
+                      <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                        {courseSearchQuery ? 'Tidak ada kursus yang sesuai dengan pencarian' : 'Tidak ada data kursus'}
                       </td>
                     </tr>
                   )}
@@ -1376,10 +1303,10 @@ export default function AdminDashboard() {
         return renderUsersContent();
       case 'verification':
         return renderVerificationContent();
-      case 'activities':
-        return renderActivitiesContent();
-      case 'competencies':
-        return renderCompetenciesContent();
+      case 'events':
+        return renderEventsContent();
+      case 'courses':
+        return renderCoursesContent();
       default:
         return renderDashboardContent();
     }
@@ -1428,32 +1355,31 @@ export default function AdminDashboard() {
                 } group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full`}
               >
                 <FileCheck className="mr-3 h-5 w-5" />
-                Verifikasi Kegiatan
+                Verifikasi Pengajuan
               </button>
 
-              {/* New tabs for managing activities and competencies */}
               <button
-                onClick={() => setActiveTab('activities')}
+                onClick={() => setActiveTab('events')}
                 className={`${
-                  activeTab === 'activities'
+                  activeTab === 'events'
                     ? 'bg-gray-900 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 } group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full`}
               >
                 <CalendarDays className="mr-3 h-5 w-5" />
-                Manajemen Info Kegiatan
+                Manajemen Event
               </button>
 
               <button
-                onClick={() => setActiveTab('competencies')}
+                onClick={() => setActiveTab('courses')}
                 className={`${
-                  activeTab === 'competencies'
+                  activeTab === 'courses'
                     ? 'bg-gray-900 text-white'
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                 } group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full`}
               >
                 <Award className="mr-3 h-5 w-5" />
-                Manajemen Kompetensi
+                Kursus Terakreditasi
               </button>
             </nav>
           </div>
@@ -1484,14 +1410,6 @@ export default function AdminDashboard() {
           <div className="flex items-center md:hidden">
             <h1 className="text-lg font-medium">TIFPoint Admin</h1>
           </div>
-          <div className="flex items-center">
-            <div className="ml-3 relative md:hidden">
-              <div className="flex items-center text-sm rounded-full text-gray-400">
-                <User className="h-8 w-8" />
-                <ChevronDown size={16} />
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className="flex-1 overflow-auto p-6">
@@ -1515,36 +1433,16 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">NIM</p>
-                  <p className="font-medium">{selectedSubmission.nim}</p>
+                  <p className="text-sm text-gray-500">User</p>
+                  <p className="font-medium">{selectedSubmission.user?.name || 'Unknown User'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Nama Mahasiswa</p>
-                  <p className="font-medium">{selectedSubmission.studentName || 'Tidak tersedia'}</p>
+                  <p className="text-sm text-gray-500">Event</p>
+                  <p className="font-medium">{selectedSubmission.event?.title || 'Unknown Event'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Nama Kegiatan</p>
-                  <p className="font-medium">{selectedSubmission.activityName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Tanggal</p>
-                  <p className="font-medium">{new Date(selectedSubmission.date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Jenis Kegiatan</p>
-                  <p className="font-medium">{selectedSubmission.activityType || 'Tidak tersedia'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Area Kompetensi</p>
-                  <p className="font-medium">{selectedSubmission.competencyArea || 'Tidak tersedia'}</p>
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">Deskripsi</p>
-                  <p className="font-medium">{selectedSubmission.description}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Poin yang Diusulkan</p>
-                  <p className="font-medium">{selectedSubmission.proposedPoints || 'Tidak tersedia'}</p>
+                  <p className="text-sm text-gray-500">Tanggal Submit</p>
+                  <p className="font-medium">{new Date(selectedSubmission.createdAt).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Status</p>
@@ -1556,7 +1454,7 @@ export default function AdminDashboard() {
                     )}
                     {selectedSubmission.status === 'approved' && (
                       <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs">
-                        Disetujui ({selectedSubmission.points} poin)
+                        Disetujui
                       </span>
                     )}
                     {selectedSubmission.status === 'rejected' && (
@@ -1570,18 +1468,10 @@ export default function AdminDashboard() {
                   <p className="text-sm text-gray-500">Bukti Kegiatan</p>
                   <div className="mt-2">
                     <div className="border border-gray-300 rounded-lg p-4 flex items-center justify-center">
-                      {selectedSubmission.documentUrl ? (
-                        <a 
-                          href={selectedSubmission.documentUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="text-blue-600 hover:text-blue-800 flex items-center"
-                        >
-                          <FileCheck className="mr-2" />
-                          Lihat Dokumen
-                        </a>
+                      {selectedSubmission.evidence ? (
+                        <p className="text-gray-700">{selectedSubmission.evidence}</p>
                       ) : (
-                        <p className="text-gray-500">Tidak ada dokumen</p>
+                        <p className="text-gray-500">Tidak ada bukti</p>
                       )}
                     </div>
                   </div>
@@ -1602,9 +1492,7 @@ export default function AdminDashboard() {
                       value={approvalPoints}
                       onChange={(e) => setApprovalPoints(e.target.value)}
                       min="0"
-                      max="15"
                     />
-                    <p className="mt-1 text-xs text-gray-500">Nilai usulan: {selectedSubmission.proposedPoints || 'Tidak tersedia'}</p>
                   </div>
                   
                   <div className="md:col-span-2">
@@ -1640,20 +1528,6 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               )}
-              
-              {selectedSubmission.status === 'approved' && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <p className="text-sm text-gray-500">Poin yang Diberikan</p>
-                  <p className="text-green-600 font-bold text-xl">{selectedSubmission.points}</p>
-                </div>
-              )}
-              
-              {selectedSubmission.status === 'rejected' && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <p className="text-sm text-gray-500">Alasan Penolakan</p>
-                  <p className="text-red-600">{selectedSubmission.comment || 'Tidak ada komentar'}</p>
-                </div>
-              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-200">
               <button
@@ -1667,65 +1541,52 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Activity Form Modal */}
-      {isActivityModalOpen && (
+      {/* Event Form Modal */}
+      {isEventModalOpen && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-lg font-semibold text-gray-900">
-                {activityFormData.isEditing ? 'Edit Kegiatan' : 'Tambah Kegiatan Baru'}
+                {eventFormData.isEditing ? 'Edit Event' : 'Tambah Event Baru'}
               </h3>
               <button 
-                onClick={() => setIsActivityModalOpen(false)}
+                onClick={() => setIsEventModalOpen(false)}
                 className="text-gray-400 hover:text-gray-500"
               >
                 <XCircle />
               </button>
             </div>
-            <form onSubmit={handleSaveActivity}>
+            <div>
               <div className="px-6 py-4 space-y-4">
-                {error && (
-                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <AlertCircle className="h-5 w-5 text-red-500" />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm text-red-700">{error}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                    Judul Kegiatan <span className="text-red-500">*</span>
+                    Judul Event <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     id="title"
                     name="title"
                     className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Masukkan judul kegiatan..."
-                    value={activityFormData.title}
-                    onChange={handleActivityFormChange}
+                    placeholder="Masukkan judul event..."
+                    value={eventFormData.title}
+                    onChange={handleEventFormChange}
                     required
                   />
                 </div>
                 
                 <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipe Kegiatan
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                    Deskripsi
                   </label>
-                  <input
-                    type="text"
-                    id="type"
-                    name="type"
+                  <textarea
+                    id="description"
+                    name="description"
+                    rows="3"
                     className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Misalnya: Workshop, Seminar, Kompetisi..."
-                    value={activityFormData.type}
-                    onChange={handleActivityFormChange}
-                  />
+                    placeholder="Deskripsi event..."
+                    value={eventFormData.description}
+                    onChange={handleEventFormChange}
+                  ></textarea>
                 </div>
                 
                 <div>
@@ -1737,56 +1598,183 @@ export default function AdminDashboard() {
                     id="date"
                     name="date"
                     className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    value={activityFormData.date}
-                    onChange={handleActivityFormChange}
+                    value={eventFormData.date}
+                    onChange={handleEventFormChange}
                     required
                   />
                 </div>
                 
                 <div>
-                  <label htmlFor="points" className="block text-sm font-medium text-gray-700 mb-1">
-                    Poin <span className="text-red-500">*</span>
+                  <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+                    Lokasi
+                  </label>
+                  <input
+                    type="text"
+                    id="location"
+                    name="location"
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Lokasi event..."
+                    value={eventFormData.location}
+                    onChange={handleEventFormChange}
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="pointValue" className="block text-sm font-medium text-gray-700 mb-1">
+                    Nilai Poin <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
-                    id="points"
-                    name="points"
+                    id="pointValue"
+                    name="pointValue"
                     className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Masukkan jumlah poin..."
-                    value={activityFormData.points}
-                    onChange={handleActivityFormChange}
+                    placeholder="Masukkan nilai poin..."
+                    value={eventFormData.pointValue}
+                    onChange={handleEventFormChange}
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEventModalOpen(false)}
+                  className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEvent}
+                  className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Menyimpan...
+                    </div>
+                  ) : (
+                    'Simpan'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Course Form Modal */}
+      {isCourseModalOpen && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {courseFormData.isEditing ? 'Edit Kursus' : 'Tambah Kursus Baru'}
+              </h3>
+              <button 
+                onClick={() => setIsCourseModalOpen(false)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <XCircle />
+              </button>
+            </div>
+            <div>
+              <div className="px-6 py-4 space-y-4">
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                    Nama Kursus <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Masukkan nama kursus..."
+                    value={courseFormData.name}
+                    onChange={handleCourseFormChange}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-1">
+                    Provider <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="provider"
+                    name="provider"
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Misalnya: Coursera, Udemy, dll..."
+                    value={courseFormData.provider}
+                    onChange={handleCourseFormChange}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-1">
+                    Durasi (jam)
+                  </label>
+                  <input
+                    type="number"
+                    id="duration"
+                    name="duration"
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Durasi dalam jam..."
+                    value={courseFormData.duration}
+                    onChange={handleCourseFormChange}
+                    min="0"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="pointValue" className="block text-sm font-medium text-gray-700 mb-1">
+                    Nilai Poin <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="pointValue"
+                    name="pointValue"
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Masukkan nilai poin..."
+                    value={courseFormData.pointValue}
+                    onChange={handleCourseFormChange}
                     min="0"
                     required
                   />
                 </div>
                 
                 <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Deskripsi <span className="text-red-500">*</span>
+                  <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-1">
+                    URL Kursus
                   </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows="3"
+                  <input
+                    type="url"
+                    id="url"
+                    name="url"
                     className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Deskripsi tentang kegiatan..."
-                    value={activityFormData.description}
-                    onChange={handleActivityFormChange}
-                    required
-                  ></textarea>
+                    placeholder="https://..."
+                    value={courseFormData.url}
+                    onChange={handleCourseFormChange}
+                  />
                 </div>
               </div>
               
               <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setIsActivityModalOpen(false)}
+                  onClick={() => setIsCourseModalOpen(false)}
                   className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Batal
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleSaveCourse}
                   className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   disabled={loading}
                 >
@@ -1800,114 +1788,7 @@ export default function AdminDashboard() {
                   )}
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Competency Form Modal */}
-      {isCompetencyModalOpen && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {competencyFormData.isEditing ? 'Edit Kompetensi' : 'Tambah Kompetensi Baru'}
-              </h3>
-              <button 
-                onClick={() => setIsCompetencyModalOpen(false)}
-                className="text-gray-400 hover:text-gray-500"
-              >
-                <XCircle />
-              </button>
             </div>
-            <form onSubmit={handleSaveCompetency}>
-              <div className="px-6 py-4 space-y-4">
-                {error && (
-                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <AlertCircle className="h-5 w-5 text-red-500" />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm text-red-700">{error}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                    Judul Kompetensi <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Masukkan judul kompetensi..."
-                    value={competencyFormData.title}
-                    onChange={handleCompetencyFormChange}
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Deskripsi <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows="3"
-                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Deskripsi tentang kompetensi..."
-                    value={competencyFormData.description}
-                    onChange={handleCompetencyFormChange}
-                    required
-                  ></textarea>
-                </div>
-                
-                <div>
-                  <label htmlFor="points" className="block text-sm font-medium text-gray-700 mb-1">
-                    Informasi Poin <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="points"
-                    name="points"
-                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Contoh: Hingga 12 poin per proyek tergantung kompleksitas"
-                    value={competencyFormData.points}
-                    onChange={handleCompetencyFormChange}
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCompetencyModalOpen(false)}
-                  className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                      Menyimpan...
-                    </div>
-                  ) : (
-                    'Simpan'
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
@@ -1921,9 +1802,15 @@ export default function AdminDashboard() {
             </div>
             <div className="px-6 py-4">
               <p className="text-sm text-gray-500">
-                Apakah Anda yakin ingin menghapus {deleteType === 'activity' ? 'kegiatan' : 'kompetensi'} ini?
+                Apakah Anda yakin ingin menghapus {
+                  deleteType === 'event' ? 'event' : 
+                  deleteType === 'course' ? 'kursus' : 
+                  deleteType === 'user' ? 'pengguna' : 'item'
+                } ini?
                 <br />
-                <span className="font-semibold">{itemToDelete.title}</span>
+                <span className="font-semibold">
+                  {itemToDelete.title || itemToDelete.name || itemToDelete.username || 'Unknown'}
+                </span>
               </p>
               <p className="text-sm text-red-500 mt-2">
                 Tindakan ini tidak dapat dibatalkan.
@@ -1955,5 +1842,5 @@ export default function AdminDashboard() {
         </div>
       )}
     </div>
-  )
+  );
 }

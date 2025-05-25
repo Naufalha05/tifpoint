@@ -32,18 +32,139 @@ const ActivityHistory = () => {
           return;
         }
 
-        // Fetch activities from the API with pagination
-        const response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/student/activities?page=${page}&limit=10`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        // Try multiple endpoints to fetch activities
+        let response;
+        let transformedActivities = [];
 
-        // Check if response is successful
-        if (!response.ok) {
-          // Try to parse error as JSON, but handle non-JSON responses too
+        // First try the student activities endpoint
+        try {
+          response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/student/activities?page=${page}&limit=10`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Check if pagination info is available in the response
+            if (data.pagination) {
+              setTotalPages(data.pagination.totalPages || 1);
+            }
+            
+            // Transform API response to match our component's expected structure
+            transformedActivities = (data.activities || data.data || data).map(activity => ({
+              id: activity._id || activity.id,
+              title: activity.activityName || activity.title || activity.name,
+              status: activity.status || 'pending',
+              submittedDate: activity.createdAt || activity.submittedAt || activity.date,
+              date: activity.activityDate || activity.date || activity.eventDate,
+              type: activity.activityType || activity.type || '-',
+              competencyArea: activity.competencyArea || '-',
+              points: activity.points || 0,
+              expectedPoints: activity.proposedPoints || activity.expectedPoints || activity.points || 0,
+              feedback: activity.feedback || activity.comment || '',
+              feedbackDate: activity.updatedAt || activity.feedbackDate,
+              documentUrl: activity.documentUrl || activity.evidenceUrl || null,
+              description: activity.description || '',
+            }));
+          }
+        } catch (err) {
+          console.warn('Student activities endpoint failed, trying alternative:', err);
+        }
+
+        // If student endpoint failed, try submissions endpoint
+        if (transformedActivities.length === 0) {
+          try {
+            response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/submissions', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              
+              // Get user profile to filter submissions by current user
+              const profileResponse = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/profile', {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              let currentUserId = null;
+              if (profileResponse.ok) {
+                const profile = await profileResponse.json();
+                currentUserId = profile.id;
+              }
+
+              // Transform submissions data
+              const submissions = Array.isArray(data) ? data : (data.submissions || []);
+              transformedActivities = submissions
+                .filter(submission => !currentUserId || submission.userId === currentUserId)
+                .map(submission => ({
+                  id: submission._id || submission.id,
+                  title: submission.activityDetails?.activityName || submission.title || 'Kegiatan',
+                  status: 'pending', // Default status for submissions
+                  submittedDate: submission.createdAt || submission.date,
+                  date: submission.activityDetails?.activityDate || submission.date,
+                  type: submission.activityDetails?.activityType || '-',
+                  competencyArea: submission.activityDetails?.competencyArea || '-',
+                  points: 0,
+                  expectedPoints: submission.activityDetails?.proposedPoints || 0,
+                  feedback: '',
+                  feedbackDate: null,
+                  documentUrl: submission.evidence || null,
+                  description: submission.activityDetails?.description || '',
+                }));
+            }
+          } catch (err) {
+            console.warn('Submissions endpoint also failed:', err);
+          }
+        }
+
+        // If all specific endpoints fail, try generic events endpoint as fallback
+        if (transformedActivities.length === 0) {
+          try {
+            response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/events', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const events = Array.isArray(data) ? data : (data.events || []);
+              
+              transformedActivities = events.map(event => ({
+                id: event._id || event.id,
+                title: event.title || event.name,
+                status: 'pending', // Default status
+                submittedDate: event.createdAt || event.date,
+                date: event.date || event.eventDate,
+                type: event.type || '-',
+                competencyArea: '-',
+                points: event.pointValue || event.points || 0,
+                expectedPoints: event.pointValue || event.points || 0,
+                feedback: '',
+                feedbackDate: null,
+                documentUrl: null,
+                description: event.description || '',
+              }));
+            }
+          } catch (err) {
+            console.warn('Events endpoint also failed:', err);
+          }
+        }
+
+        // If we still have no data and got a response, check for error
+        if (transformedActivities.length === 0 && response && !response.ok) {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const errorData = await response.json();
@@ -52,29 +173,6 @@ const ActivityHistory = () => {
             throw new Error(`Error: ${response.status} ${response.statusText}`);
           }
         }
-
-        const data = await response.json();
-        
-        // Check if pagination info is available in the response
-        if (data.pagination) {
-          setTotalPages(data.pagination.totalPages || 1);
-        }
-        
-        // Transform API response to match our component's expected structure
-        const transformedActivities = (data.activities || data).map(activity => ({
-          id: activity._id,
-          title: activity.activityName || activity.title, 
-          status: activity.status || 'pending',
-          submittedDate: activity.createdAt, 
-          date: activity.activityDate || activity.date,
-          type: activity.activityType || '-',
-          competencyArea: activity.competencyArea || '-',
-          points: activity.points || 0,
-          expectedPoints: activity.proposedPoints || activity.points || 0,
-          feedback: activity.feedback || '',
-          feedbackDate: activity.updatedAt,
-          documentUrl: activity.documentUrl || activity.evidenceUrl || null,
-        }));
         
         setActivities(transformedActivities);
         setIsLoading(false);
@@ -164,8 +262,12 @@ const ActivityHistory = () => {
   // Format date from YYYY-MM-DD to DD Month YYYY
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('id-ID', options);
+    try {
+      const options = { year: 'numeric', month: 'long', day: 'numeric' };
+      return new Date(dateString).toLocaleDateString('id-ID', options);
+    } catch (error) {
+      return dateString;
+    }
   };
 
   // Handle activity selection
@@ -258,7 +360,7 @@ const ActivityHistory = () => {
         } relative z-10 hover:shadow-xl`}
       >
         <div className="bg-[#201E43] py-4 px-6">
-          <h2 className="text-xl font-bold text-white">Riwayat Pengajuan Kegiatan</h2>
+          <h2 className="text-xl font-semibold text-white">Riwayat Pengajuan Kegiatan</h2>
         </div>
         
         {error && (
@@ -365,13 +467,13 @@ const ActivityHistory = () => {
                 return (
                   <div 
                     key={activity.id} 
-                    className={`border ${statusStyles.borderColor} rounded-lg overflow-hidden transition-all duration-500 transform hover:shadow-lg ${
+                    className={`border ${statusStyles.borderColor} rounded-lg overflow-hidden transition-all duration-500 transform hover:shadow-lg cursor-pointer ${
                       showAnimation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                     } ${isSelected ? 'shadow-lg' : ''}`}
                     style={{ transitionDelay: `${index * 50 + 150}ms` }}
                     onClick={() => toggleActivitySelection(activity.id)}
                   >
-                    <div className={`${statusStyles.bgColor} px-4 py-3 flex justify-between items-center cursor-pointer transition-all duration-300 hover:brightness-95`}>
+                    <div className={`${statusStyles.bgColor} px-4 py-3 flex justify-between items-center transition-all duration-300 hover:brightness-95`}>
                       <div className="flex items-center">
                         <div className={`${statusStyles.iconBg} p-2 rounded-full mr-3 transition-transform duration-300 ${isSelected ? 'transform rotate-12' : ''}`}>
                           {renderStatusIcon(activity.status)}
@@ -388,7 +490,7 @@ const ActivityHistory = () => {
                       </div>
                     </div>
                     
-                    <div className={`bg-white p-4 transition-all duration-500 ${isSelected ? 'max-h-96' : 'max-h-96'}`}>
+                    <div className={`bg-white p-4 transition-all duration-500 ${isSelected ? 'max-h-auto' : 'max-h-auto'}`}>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="transition-all duration-300 hover:translate-x-1">
                           <p className="text-sm text-gray-500">Jenis Kegiatan</p>
@@ -414,6 +516,14 @@ const ActivityHistory = () => {
                         </div>
                       </div>
                       
+                      {/* Description */}
+                      {activity.description && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-sm text-gray-500">Deskripsi</p>
+                          <p className="text-sm text-gray-700 mt-1">{activity.description}</p>
+                        </div>
+                      )}
+                      
                       {/* Document Link */}
                       {activity.documentUrl && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
@@ -433,18 +543,14 @@ const ActivityHistory = () => {
                       )}
                       
                       {activity.feedback && (
-                        <div className={`mt-4 pt-4 border-t border-gray-200 transition-all duration-500 ${
-                          isSelected ? 'opacity-100 transform translate-y-0' : 'opacity-100 transform translate-y-0'
-                        }`}>
+                        <div className={`mt-4 pt-4 border-t border-gray-200 transition-all duration-500`}>
                           <p className="text-sm text-gray-500">Feedback ({formatDate(activity.feedbackDate)})</p>
                           <p className="mt-1">{activity.feedback}</p>
                         </div>
                       )}
                       
                       {activity.status === 'pending' && (
-                        <div className={`mt-4 pt-4 border-t border-gray-200 text-sm text-gray-500 italic transition-all duration-500 ${
-                          isSelected ? 'opacity-100' : 'opacity-100'
-                        }`}>
+                        <div className={`mt-4 pt-4 border-t border-gray-200 text-sm text-gray-500 italic transition-all duration-500`}>
                           <div className="flex items-center">
                             <div className="mr-2 h-2 w-2 bg-yellow-500 rounded-full animate-pulse"></div>
                             Pengajuan Anda sedang ditinjau oleh admin.
@@ -473,6 +579,17 @@ const ActivityHistory = () => {
                     ? `Tidak ada kegiatan dengan status "${getStatusStyles(filterStatus).text}"`
                     : 'Belum ada kegiatan yang diajukan'}
               </p>
+              <div className="mt-6">
+                <Link
+                  to="/submit-activity"
+                  className="inline-flex items-center px-4 py-2 bg-[#201E43] text-white rounded-lg hover:bg-[#134B70] transition-all duration-300 transform hover:scale-105"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                  </svg>
+                  Ajukan Kegiatan Baru
+                </Link>
+              </div>
             </div>
           )}
           

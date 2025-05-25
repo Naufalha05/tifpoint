@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, Edit2, X, ArrowLeft, Save, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, ArrowLeft, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Profile = () => {
   const [userData, setUserData] = useState({
     username: '',
+    name: '',
     nim: '',
     email: ''
   });
-  const [editMode, setEditMode] = useState(false);
-  const [formData, setFormData] = useState({ username: '' });
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -27,8 +25,21 @@ const Profile = () => {
           return;
         }
 
-        // Fetch user profile from the TIFPoint API
-        const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/student/me', {
+        // First check if we have cached user data in localStorage
+        const cachedUserData = localStorage.getItem('userData');
+        let initialData = null;
+        
+        if (cachedUserData) {
+          try {
+            initialData = JSON.parse(cachedUserData);
+            console.log('Found cached user data:', initialData);
+          } catch (e) {
+            console.error('Error parsing cached user data:', e);
+          }
+        }
+
+        // Fetch fresh user profile from the TIFPoint API
+        const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/profile', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -38,6 +49,21 @@ const Profile = () => {
 
         // Check if response is successful
         if (!response.ok) {
+          // If API call fails but we have cached data, use that instead
+          if (initialData) {
+            setUserData({
+              username: initialData.username || '',
+              name: initialData.name || '',
+              nim: initialData.nim || '',
+              email: initialData.email || ''
+            });
+            setIsLoading(false);
+            
+            // Show warning that we're using cached data
+            
+            return;
+          }
+          
           // Try to parse error as JSON, but handle non-JSON responses too
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
@@ -50,89 +76,54 @@ const Profile = () => {
 
         // Parse the response data
         const data = await response.json();
-        console.log('Profile data:', data);
+        console.log('Profile data from API:', data);
         
-        // Map the API response to our component's data structure
-        setUserData({
-          username: data.name || data.fullName || data.username || '',
-          nim: data.nim || data.studentId || '',
-          email: data.email || ''
-        });
-        
-        // Also set form data for edit mode
-        setFormData({ 
-          username: data.name || data.fullName || data.username || '' 
-        });
+        // Store updated data in localStorage for caching
+        if (data) {
+          const updatedUserData = {
+            username: data.username || '',
+            name: data.name || data.fullName || '',
+            nim: data.nim || data.studentId || data.student_id || '',
+            email: data.email || ''
+          };
+          
+          console.log('Processed user data:', updatedUserData);
+          
+          localStorage.setItem('userData', JSON.stringify(updatedUserData));
+          
+          // Set the user data state
+          setUserData(updatedUserData);
+        }
         
         setIsLoading(false);
       } catch (err) {
         console.error('Error fetching profile data:', err);
-        setError(err.message || 'Gagal memuat data profil. Silakan coba lagi.');
+        
+        // If API call fails, try to use cached data
+        const cachedUserData = localStorage.getItem('userData');
+        if (cachedUserData) {
+          try {
+            const data = JSON.parse(cachedUserData);
+            setUserData({
+              username: data.username || '',
+              name: data.name || '',
+              nim: data.nim || '',
+              email: data.email || ''
+            });
+            setError('Gagal memuat data terbaru. Menampilkan data tersimpan.');
+          } catch (e) {
+            setError('Gagal memuat data profil. Silakan coba lagi.');
+          }
+        } else {
+          setError(err.message || 'Gagal memuat data profil. Silakan coba lagi.');
+        }
+        
         setIsLoading(false);
       }
     };
 
     fetchUserData();
   }, []);
-
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (!formData.username) {
-      setError('Nama pengguna tidak boleh kosong.');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        setError('Anda belum login. Silakan login terlebih dahulu.');
-        return;
-      }
-
-      // Update user profile to the API endpoint
-      const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/student/profile', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: formData.username
-        })
-      });
-
-      // Check if response is successful
-      if (!response.ok) {
-        // Try to parse error as JSON, but handle non-JSON responses too
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Gagal memperbarui profil');
-        } else {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
-      }
-      
-      // Parse response data
-      const data = await response.json();
-      
-      // Update local state with new data
-      setUserData({ ...userData, username: formData.username });
-      setSuccess('Profil berhasil diperbarui.');
-      setEditMode(false);
-    } catch (err) {
-      console.error('Error updating profile:', err);
-      setError(err.message || 'Gagal memperbarui profil. Silakan coba lagi.');
-    }
-  };
 
   const fadeIn = {
     hidden: { opacity: 0, y: 20 },
@@ -177,7 +168,7 @@ const Profile = () => {
         >
           <h2 className="text-3xl md:text-4xl font-bold text-[#134B70] mb-3">Profil Saya</h2>
           <p className="text-lg text-[#134B70]/90 max-w-3xl">
-            Lihat dan kelola informasi profil Anda.
+            Lihat informasi profil Anda.
           </p>
         </motion.section>
 
@@ -200,18 +191,6 @@ const Profile = () => {
             </motion.div>
           )}
           
-          {success && (
-            <motion.div 
-              className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded-md flex items-start"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{ duration: 0.3 }}
-            >
-              <CheckCircle className="text-green-500 mr-3 mt-0.5" />
-              <p className="text-sm text-green-700">{success}</p>
-            </motion.div>
-          )}
-          
           {isLoading ? (
             <div className="text-center py-8">
               <div className="inline-block w-12 h-12 border-4 border-[#201E43] border-t-transparent rounded-full animate-spin"></div>
@@ -219,114 +198,60 @@ const Profile = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {!editMode ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5 }}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                <motion.div 
+                  className="flex justify-center mb-8"
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
                 >
-                  <motion.div 
-                    className="flex justify-center mb-8"
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                  >
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-r from-[#201E43] to-[#134B70] flex items-center justify-center shadow-lg">
-                      <User className="w-12 h-12 text-white" />
-                    </div>
-                  </motion.div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <motion.div 
-                      className="bg-white/70 p-4 rounded-lg shadow-md"
-                      whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <label className="block text-sm font-medium text-[#134B70]">Nama Pengguna</label>
-                      <p className="mt-1 text-lg font-semibold text-gray-900">{userData.username}</p>
-                    </motion.div>
-                    
-                    <motion.div 
-                      className="bg-white/70 p-4 rounded-lg shadow-md"
-                      whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <label className="block text-sm font-medium text-[#134B70]">NIM</label>
-                      <p className="mt-1 text-lg font-semibold text-gray-900">{userData.nim}</p>
-                    </motion.div>
-                    
-                    <motion.div 
-                      className="bg-white/70 p-4 rounded-lg shadow-md md:col-span-2"
-                      whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <label className="block text-sm font-medium text-[#134B70]">Email</label>
-                      <p className="mt-1 text-lg font-semibold text-gray-900">{userData.email}</p>
-                    </motion.div>
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-r from-[#201E43] to-[#134B70] flex items-center justify-center shadow-lg">
+                    <User className="w-12 h-12 text-white" />
                   </div>
-                  
-                  <motion.button
-                    onClick={() => setEditMode(true)}
-                    className="mt-8 bg-[#201E43] text-white px-6 py-3 rounded-lg hover:bg-[#134B70] transition-all duration-300 flex items-center justify-center shadow-md hover:shadow-xl transform hover:-translate-y-1 w-full md:w-auto"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Edit2 className="w-5 h-5 mr-2" />
-                    Edit Profil
-                  </motion.button>
                 </motion.div>
-              ) : (
-                <motion.form 
-                  onSubmit={handleSubmit} 
-                  className="space-y-6"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <motion.div 
-                    className="bg-white/80 p-6 rounded-lg shadow-md"
-                    initial={{ y: 20 }}
-                    animate={{ y: 0 }}
-                    transition={{ duration: 0.4 }}
+                    className="bg-white/70 p-4 rounded-lg shadow-md"
+                    whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                    transition={{ duration: 0.2 }}
                   >
-                    <label htmlFor="username" className="block text-sm font-medium text-[#134B70] mb-2">
-                      Nama Pengguna
-                    </label>
-                    <input
-                      id="username"
-                      name="username"
-                      type="text"
-                      value={formData.username}
-                      onChange={handleInputChange}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-[#201E43] focus:ring focus:ring-[#201E43] focus:ring-opacity-50 transition-all duration-300 py-3"
-                      autoFocus
-                    />
+                    <label className="block text-sm font-medium text-[#134B70]">Username</label>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">{userData.username || '-'}</p>
                   </motion.div>
                   
-                  <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-4">
-                    <motion.button
-                      type="submit"
-                      className="bg-[#201E43] text-white px-6 py-3 rounded-lg hover:bg-[#134B70] transition-all duration-300 flex items-center justify-center shadow-md hover:shadow-xl"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Save className="w-5 h-5 mr-2" />
-                      Simpan Perubahan
-                    </motion.button>
-                    
-                    <motion.button
-                      type="button"
-                      onClick={() => setEditMode(false)}
-                      className="bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 transition-all duration-300 flex items-center justify-center"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <X className="w-5 h-5 mr-2" />
-                      Batal
-                    </motion.button>
-                  </div>
-                </motion.form>
-              )}
+                  <motion.div 
+                    className="bg-white/70 p-4 rounded-lg shadow-md"
+                    whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <label className="block text-sm font-medium text-[#134B70]">Nama Lengkap</label>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">{userData.name || '-'}</p>
+                  </motion.div>
+                  
+                  <motion.div 
+                    className="bg-white/70 p-4 rounded-lg shadow-md"
+                    whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <label className="block text-sm font-medium text-[#134B70]">NIM</label>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">{userData.nim || '-'}</p>
+                  </motion.div>
+                  
+                  <motion.div 
+                    className="bg-white/70 p-4 rounded-lg shadow-md"
+                    whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <label className="block text-sm font-medium text-[#134B70]">Email</label>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">{userData.email || '-'}</p>
+                  </motion.div>
+                </div>
+              </motion.div>
             </div>
           )}
         </motion.section>
