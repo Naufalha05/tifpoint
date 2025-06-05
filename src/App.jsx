@@ -10,6 +10,7 @@ import ActivityHistory from './pages/ActivityHistory';
 import SubmitActivity from './pages/SubmitActivity';
 import Competencies from './pages/Competencies';
 import AdminDashboard from './pages/AdminDashboard';
+import Settings from './pages/Settings';
 // Layout component with the main navbar
 const MainLayout = () => {
   return (
@@ -39,6 +40,7 @@ function App() {
         <Route path="/submit-activity" element={<SubmitActivity />} />
         <Route path="/competencies" element={<Competencies />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </Router>
   );

@@ -34,7 +34,7 @@ const Register = () => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/auth/register', {
+      const response = await fetch('https://tifpoint-production.up.railway.app/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

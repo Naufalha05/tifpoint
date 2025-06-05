@@ -8,7 +8,12 @@ const Profile = () => {
     username: '',
     name: '',
     nim: '',
-    email: ''
+    email: '',
+    totalPoints: 0, // New field for statistics if needed
+    targetPoints: 0, // New field for statistics if needed
+    completionPercentage: 0, // New field for statistics if needed
+    remainingPoints: 0, // New field for statistics if needed
+    isCompleted: false, // New field for statistics if needed
   });
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,46 +30,17 @@ const Profile = () => {
           return;
         }
 
-        // First check if we have cached user data in localStorage
-        const cachedUserData = localStorage.getItem('userData');
-        let initialData = null;
-        
-        if (cachedUserData) {
-          try {
-            initialData = JSON.parse(cachedUserData);
-            console.log('Found cached user data:', initialData);
-          } catch (e) {
-            console.error('Error parsing cached user data:', e);
-          }
-        }
-
-        // Fetch fresh user profile from the TIFPoint API
-        const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/profile', {
+        // Fetch user profile from the updated endpoint
+        const response = await fetch('https://tifpoint-production.up.railway.app/api/auth/profile', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+            'Content-Type': 'application/json',
+          },
         });
 
         // Check if response is successful
         if (!response.ok) {
-          // If API call fails but we have cached data, use that instead
-          if (initialData) {
-            setUserData({
-              username: initialData.username || '',
-              name: initialData.name || '',
-              nim: initialData.nim || '',
-              email: initialData.email || ''
-            });
-            setIsLoading(false);
-            
-            // Show warning that we're using cached data
-            
-            return;
-          }
-          
-          // Try to parse error as JSON, but handle non-JSON responses too
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const errorData = await response.json();
@@ -77,47 +53,29 @@ const Profile = () => {
         // Parse the response data
         const data = await response.json();
         console.log('Profile data from API:', data);
-        
-        // Store updated data in localStorage for caching
+
+        // Set the user data state according to API response
         if (data) {
-          const updatedUserData = {
+          const profileData = {
             username: data.username || '',
-            name: data.name || data.fullName || '',
-            nim: data.nim || data.studentId || data.student_id || '',
-            email: data.email || ''
+            name: data.name || '',
+            nim: data.nim || '',
+            email: data.email || '',
+            totalPoints: data.statistics?.totalPoints || 0,
+            targetPoints: data.statistics?.targetPoints || 0,
+            completionPercentage: data.statistics?.completionPercentage || 0,
+            remainingPoints: data.statistics?.remainingPoints || 0,
+            isCompleted: data.statistics?.isCompleted || false,
           };
-          
-          console.log('Processed user data:', updatedUserData);
-          
-          localStorage.setItem('userData', JSON.stringify(updatedUserData));
-          
-          // Set the user data state
-          setUserData(updatedUserData);
+
+          console.log('Processed user data:', profileData);
+          setUserData(profileData);
         }
-        
+
         setIsLoading(false);
       } catch (err) {
         console.error('Error fetching profile data:', err);
-        
-        // If API call fails, try to use cached data
-        const cachedUserData = localStorage.getItem('userData');
-        if (cachedUserData) {
-          try {
-            const data = JSON.parse(cachedUserData);
-            setUserData({
-              username: data.username || '',
-              name: data.name || '',
-              nim: data.nim || '',
-              email: data.email || ''
-            });
-            setError('Gagal memuat data terbaru. Menampilkan data tersimpan.');
-          } catch (e) {
-            setError('Gagal memuat data profil. Silakan coba lagi.');
-          }
-        } else {
-          setError(err.message || 'Gagal memuat data profil. Silakan coba lagi.');
-        }
-        
+        setError(err.message || 'Gagal memuat data profil. Silakan coba lagi.');
         setIsLoading(false);
       }
     };
@@ -142,7 +100,7 @@ const Profile = () => {
         <div className="absolute w-96 h-96 rounded-full bg-teal-300/20 top-5 -right-20 animate-float"></div>
         <div className="absolute w-40 h-40 rounded-full bg-purple-300/10 bottom-10 left-1/4 animate-float-delay"></div>
       </div>
-      
+
       <main className="relative z-10 container mx-auto px-4 py-10 sm:px-6 lg:px-8">
         {/* Back to Dashboard Button */}
         <motion.div 
@@ -190,7 +148,7 @@ const Profile = () => {
               <p className="text-sm text-red-700">{error}</p>
             </motion.div>
           )}
-          
+
           {isLoading ? (
             <div className="text-center py-8">
               <div className="inline-block w-12 h-12 border-4 border-[#201E43] border-t-transparent rounded-full animate-spin"></div>
@@ -258,7 +216,7 @@ const Profile = () => {
       </main>
 
       {/* Add custom animation keyframes */}
-      <style jsx>{`
+      <style>{`
         @keyframes float {
           0% { transform: translateY(0px); }
           50% { transform: translateY(-20px); }

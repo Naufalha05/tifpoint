@@ -12,7 +12,8 @@ const SubmitActivity = () => {
     competencyArea: '',
     expectedPoints: '',
     evidence: null,
-    additionalNotes: ''
+    additionalNotes: '',
+    eventId: '' // Added eventId field
   });
   const [preview, setPreview] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -20,6 +21,11 @@ const SubmitActivity = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeField, setActiveField] = useState(null);
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
+  const [events, setEvents] = useState([]); // State untuk events
+  const [loadingEvents, setLoadingEvents] = useState(false);
+
+  // Base URL for API - Mixed endpoints (some with /api prefix, some without)
+  const API_BASE_URL = 'https://tifpoint-production.up.railway.app/api';
 
   // Animation effect when component mounts
   useEffect(() => {
@@ -27,7 +33,41 @@ const SubmitActivity = () => {
     // Load pending submissions
     const stored = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
     setPendingSubmissions(stored);
+    // Load events saat component mount
+    loadEvents();
   }, []);
+
+  // Function to load events from API
+  const loadEvents = async () => {
+    setLoadingEvents(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Token tidak ditemukan. Silakan login terlebih dahulu.');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/events`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load events: ${response.status}`);
+      }
+
+      const eventsData = await response.json();
+      setEvents(eventsData);
+      console.log('Events loaded:', eventsData);
+    } catch (error) {
+      console.error('Error loading events:', error);
+      setError('Gagal memuat daftar event. ' + error.message);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
 
   // Function to export pending submissions as file
   const exportPendingSubmissions = () => {
@@ -57,7 +97,8 @@ const SubmitActivity = () => {
           description: submission.formData.description,
           competencyArea: submission.formData.competencyArea,
           proposedPoints: submission.formData.expectedPoints,
-          additionalNotes: submission.formData.additionalNotes
+          additionalNotes: submission.formData.additionalNotes,
+          eventId: submission.formData.eventId
         },
         evidence: {
           fileName: submission.formData.evidence?.name || 'Unknown',
@@ -84,56 +125,6 @@ const SubmitActivity = () => {
     alert('Data pengajuan berhasil diekspor! Silakan kirim file ini ke admin untuk diproses manual.');
   };
 
-  // Function to export as email format
-  const exportAsEmailFormat = () => {
-    const stored = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
-    if (stored.length === 0) {
-      alert('Tidak ada pengajuan tertunda untuk diekspor.');
-      return;
-    }
-
-    let emailContent = 'Subject: Pengajuan Kegiatan - Manual Submission\n\n';
-    emailContent += 'Yth. Admin TIF Point,\n\n';
-    emailContent += 'Berikut adalah pengajuan kegiatan yang tidak dapat disubmit melalui sistem karena API sedang maintenance:\n\n';
-
-    stored.forEach((submission, index) => {
-      emailContent += `--- PENGAJUAN ${index + 1} ---\n`;
-      emailContent += `Timestamp: ${new Date(submission.timestamp).toLocaleString('id-ID')}\n`;
-      emailContent += `Nama: ${submission.profileData?.name || 'Unknown'}\n`;
-      emailContent += `NIM: ${submission.profileData?.nim || 'Unknown'}\n`;
-      emailContent += `Email: ${submission.profileData?.email || 'Unknown'}\n\n`;
-      
-      emailContent += `Judul Kegiatan: ${submission.formData.title}\n`;
-      emailContent += `Jenis Kegiatan: ${submission.formData.activityType}\n`;
-      emailContent += `Tanggal Kegiatan: ${submission.formData.date}\n`;
-      emailContent += `Area Kompetensi: ${submission.formData.competencyArea}\n`;
-      emailContent += `Usulan Poin: ${submission.formData.expectedPoints}\n`;
-      emailContent += `Deskripsi: ${submission.formData.description}\n`;
-      if (submission.formData.additionalNotes) {
-        emailContent += `Catatan Tambahan: ${submission.formData.additionalNotes}\n`;
-      }
-      emailContent += `File Bukti: ${submission.formData.evidence?.name || 'Unknown'}\n`;
-      emailContent += '\n';
-    });
-
-    emailContent += 'Mohon untuk memproses pengajuan ini secara manual.\n\n';
-    emailContent += 'Terima kasih,\n';
-    emailContent += 'Sistem TIF Point (Auto-generated)';
-
-    // Create downloadable text file
-    const blob = new Blob([emailContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `email-pengajuan-kegiatan-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    alert('Format email berhasil dibuat! Silakan kirim konten file ini via email ke admin.');
-  };
-
   // Function to clear all pending submissions
   const clearAllPendingSubmissions = () => {
     if (window.confirm('Apakah Anda yakin ingin menghapus semua pengajuan tertunda? Pastikan Anda sudah mengekspor data terlebih dahulu.')) {
@@ -143,21 +134,17 @@ const SubmitActivity = () => {
     }
   };
 
-  // Function to test API endpoints manually
+  // Function to test API endpoints
   const testAPIEndpoints = async () => {
     const token = localStorage.getItem('token');
-    console.log('\n=== MANUAL API ENDPOINT TESTING ===');
+    console.log('\n=== API ENDPOINT TESTING ===');
     
     const testCases = [
-      // GET endpoints that should work according to docs
-      { method: 'GET', path: '/events', requiresAuth: false },
-      { method: 'GET', path: '/recognized-courses', requiresAuth: false },
-      { method: 'GET', path: '/profile', requiresAuth: true },
-      { method: 'GET', path: '/submissions', requiresAuth: true },
-      { method: 'GET', path: '/users', requiresAuth: true },
-      
-      // POST endpoints to test
-      { method: 'POST', path: '/submissions', requiresAuth: true, testData: { userId: 'test', eventId: null, evidence: 'test' } },
+      // Test endpoints sesuai dokumentasi API
+      { method: 'GET', path: '/events', requiresAuth: true },
+      { method: 'GET', path: '/recognized-courses', requiresAuth: true },
+      { method: 'GET', path: '/auth/profile', requiresAuth: true },
+      { method: 'GET', path: '/activities', requiresAuth: true },
     ];
     
     for (const test of testCases) {
@@ -172,17 +159,14 @@ const SubmitActivity = () => {
           headers: headers
         };
         
-        if (test.testData) {
-          options.body = JSON.stringify(test.testData);
-        }
-        
-        const response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app${test.path}`, options);
+        const response = await fetch(`${API_BASE_URL}${test.path}`, options);
         const responseText = await response.text();
         
         console.log(`${test.method} ${test.path}: ${response.status}`);
-        if (response.status !== 404) {
-          console.log(`  Headers:`, Object.fromEntries(response.headers.entries()));
-          console.log(`  Body preview:`, responseText.substring(0, 200));
+        if (response.ok) {
+          console.log(`  Success - Response length: ${responseText.length}`);
+        } else {
+          console.log(`  Error - ${responseText.substring(0, 200)}`);
         }
       } catch (error) {
         console.log(`${test.method} ${test.path}: ERROR -`, error.message);
@@ -193,7 +177,10 @@ const SubmitActivity = () => {
   // Function to retry pending submissions
   const retryPendingSubmissions = async () => {
     const token = localStorage.getItem('token');
-    if (!token) return;
+    if (!token) {
+      alert('Token tidak ditemukan. Silakan login ulang.');
+      return;
+    }
 
     const stored = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
     const successful = [];
@@ -201,7 +188,9 @@ const SubmitActivity = () => {
 
     for (const submission of stored) {
       try {
-        const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/submissions', {
+        // Fixed endpoint path - menggunakan /api/submission sesuai permintaan user
+        const response = await fetch(`${API_BASE_URL}/activities
+          `, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -209,7 +198,7 @@ const SubmitActivity = () => {
           },
           body: JSON.stringify({
             userId: submission.profileData?.id || 'temp-user',
-            eventId: null,
+            eventId: submission.formData.eventId || null,
             evidence: submission.evidenceUrl || `Activity: ${submission.formData.title}`
           })
         });
@@ -297,90 +286,81 @@ const SubmitActivity = () => {
     }
   };
 
-  // Convert file to base64 for embedding in submission
-  const convertFileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = error => reject(error);
-    });
+  // Upload file using the correct API endpoint
+  const uploadFile = async (file, token) => {
+    try {
+      console.log('Uploading file using /api/upload endpoint...');
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const uploadResponse = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type for FormData, browser will set it automatically with boundary
+        },
+        body: formData
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
+      }
+      
+      const result = await uploadResponse.json();
+      console.log('Upload success:', result);
+      
+      // Return the URL from the response according to API docs
+      return result.url;
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw new Error(`Gagal mengunggah file: ${error.message}`);
+    }
   };
 
-  // Try multiple upload strategies
-  const uploadFile = async (file, token) => {
-    const baseUrl = 'https://pweb-tifpoint-backend-production-1a28.up.railway.app';
-    
-    // Strategy 1: Try original /upload endpoint
+  // Get user profile - Updated endpoint
+  const getUserProfile = async (token) => {
     try {
-      const fileData = new FormData();
-      fileData.append('file', file);
-      
-      const uploadResponse = await fetch(`${baseUrl}/upload`, {
-        method: 'POST',
+      const profileResponse = await fetch(`${API_BASE_URL}/auth/profile`, {
         headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: fileData
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
-      if (uploadResponse.ok) {
-        const result = await uploadResponse.json();
-        return result.url;
+      if (!profileResponse.ok) {
+        throw new Error(`Failed to get profile: ${profileResponse.status}`);
       }
+      
+      const profileData = await profileResponse.json();
+      console.log('Profile data received:', profileData);
+      return profileData;
+      
     } catch (error) {
-      console.log('Upload endpoint not available, trying alternatives...');
-    }
-
-    // Strategy 2: Try /api/upload endpoint
-    try {
-      const fileData = new FormData();
-      fileData.append('file', file);
+      console.warn('Failed to get profile from API, trying token decode...', error.message);
       
-      const uploadResponse = await fetch(`${baseUrl}/api/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: fileData
-      });
-      
-      if (uploadResponse.ok) {
-        const result = await uploadResponse.json();
-        return result.url;
+      // Fallback: try to decode JWT token
+      try {
+        const tokenPayload = JSON.parse(atob(token.split('.')[1]));
+        console.log('Decoded token payload:', tokenPayload);
+        
+        const fallbackProfile = {
+          id: tokenPayload.userId || tokenPayload.id || tokenPayload.sub || 'user-' + Date.now(),
+          username: tokenPayload.username || tokenPayload.email || 'user',
+          email: tokenPayload.email || '',
+          name: tokenPayload.name || tokenPayload.username || 'User',
+          nim: tokenPayload.nim || '',
+          role: tokenPayload.role || 'student'
+        };
+        
+        console.log('Using fallback profile:', fallbackProfile);
+        return fallbackProfile;
+      } catch (tokenError) {
+        console.error('Failed to decode token:', tokenError);
+        throw new Error('Cannot get user information. Please login again.');
       }
-    } catch (error) {
-      console.log('API upload endpoint not available...');
-    }
-
-    // Strategy 3: Try /files/upload endpoint
-    try {
-      const fileData = new FormData();
-      fileData.append('file', file);
-      
-      const uploadResponse = await fetch(`${baseUrl}/files/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: fileData
-      });
-      
-      if (uploadResponse.ok) {
-        const result = await uploadResponse.json();
-        return result.url;
-      }
-    } catch (error) {
-      console.log('Files upload endpoint not available...');
-    }
-
-    // Strategy 4: Convert to base64 and include in submission
-    try {
-      const base64 = await convertFileToBase64(file);
-      return base64;
-    } catch (error) {
-      console.error('Failed to convert file to base64:', error);
-      throw new Error('Gagal memproses file');
     }
   };
 
@@ -389,361 +369,137 @@ const SubmitActivity = () => {
     setIsSubmitting(true);
     setError(null);
 
-    // Add debug info and server connectivity check
-    console.log('=== SUBMISSION DEBUG START ===');
-    console.log('Form data:', formData);
-    console.log('Base URL:', 'https://pweb-tifpoint-backend-production-1a28.up.railway.app');
-
-    // Test server connectivity and available endpoints
-    try {
-      console.log('Testing server connectivity and available endpoints...');
-      
-      // Test 1: Basic connectivity
-      const healthCheck = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/', {
-        method: 'GET',
-        mode: 'cors'
-      });
-      console.log('Basic server response status:', healthCheck.status);
-      
-      // Test 2: Test known working endpoints from API docs
-      const knownEndpoints = [
-        { path: '/events', method: 'GET', requiresAuth: false },
-        { path: '/recognized-courses', method: 'GET', requiresAuth: false },
-        { path: '/profile', method: 'GET', requiresAuth: true },
-        { path: '/submissions', method: 'GET', requiresAuth: true }
-      ];
-      
-      console.log('Testing known endpoints from API documentation:');
-      for (const endpoint of knownEndpoints) {
-        try {
-          const headers = {};
-          if (endpoint.requiresAuth) {
-            headers['Authorization'] = `Bearer ${token}`;
-          }
-          
-          const response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app${endpoint.path}`, {
-            method: endpoint.method,
-            headers: headers
-          });
-          
-          console.log(`${endpoint.method} ${endpoint.path}: ${response.status}`);
-          
-          if (response.status === 200) {
-            const data = await response.text();
-            console.log(`${endpoint.path} response length:`, data.length);
-          }
-        } catch (err) {
-          console.log(`${endpoint.method} ${endpoint.path}: ERROR -`, err.message);
-        }
-      }
-      
-    } catch (connectError) {
-      console.error('Server connectivity issue:', connectError);
-      throw new Error('Tidak dapat terhubung ke server. Periksa koneksi internet Anda atau coba lagi nanti.');
-    }
+    console.log('=== SUBMISSION STARTED ===');
 
     try {
-      // Get authentication token with validation
+      // Get and validate authentication token
       const token = localStorage.getItem('token');
       
       if (!token) {
         throw new Error('Anda belum login. Silakan login terlebih dahulu.');
       }
       
-      // Validate token format (basic JWT check)
+      // Validate token format
       const tokenParts = token.split('.');
       if (tokenParts.length !== 3) {
-        localStorage.removeItem('token'); // Remove invalid token
+        localStorage.removeItem('token');
         throw new Error('Token tidak valid. Silakan login ulang.');
       }
-      
-      // Check if token is expired (basic check)
-      try {
-        const payload = JSON.parse(atob(tokenParts[1]));
-        const currentTime = Date.now() / 1000;
-        if (payload.exp && payload.exp < currentTime) {
-          localStorage.removeItem('token'); // Remove expired token
-          throw new Error('Sesi telah berakhir. Silakan login ulang.');
-        }
-      } catch (tokenCheckError) {
-        console.warn('Could not validate token expiry:', tokenCheckError.message);
-        // Continue anyway - let server decide if token is valid
-      }
 
-      // Validate required fields
+      // Validate required fields - eventId now optional for general activities
       if (!formData.title || !formData.activityType || !formData.date || 
           !formData.description || !formData.competencyArea || !formData.evidence) {
         throw new Error('Semua field yang wajib harus diisi, termasuk bukti kegiatan.');
       }
 
-      // Get user profile with fallback endpoints
-      let profileData = null;
-      const profileEndpoints = [
-        '/profile',
-        '/api/profile', 
-        '/api/user/profile',
-        '/user/profile',
-        '/api/auth/profile',
-        '/auth/profile',
-        '/me'
-      ];
+      // Step 1: Get user profile
+      console.log('Step 1: Getting user profile...');
+      const profileData = await getUserProfile(token);
       
-      for (const endpoint of profileEndpoints) {
-        try {
-          console.log(`Trying profile endpoint: ${endpoint}`);
-          
-          const profileResponse = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app${endpoint}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (profileResponse.ok) {
-            profileData = await profileResponse.json();
-            console.log(`Success with profile endpoint: ${endpoint}`);
-            break;
-          } else {
-            console.log(`Failed with profile endpoint ${endpoint}:`, profileResponse.status);
-          }
-        } catch (err) {
-          console.log(`Error with profile endpoint ${endpoint}:`, err.message);
-        }
+      // Step 2: Upload file
+      console.log('Step 2: Uploading evidence file...');
+      const evidenceUrl = await uploadFile(formData.evidence, token);
+      
+      // Step 3: Create submission
+      console.log('Step 3: Creating submission...');
+      
+      // Validate required data before creating submission
+      if (!profileData || !profileData.id) {
+        throw new Error('User profile data is invalid. Missing user ID.');
       }
       
-      // If no profile endpoint works, try to extract user info from token
-      if (!profileData) {
-        try {
-          // Try to decode JWT token to get user info
-          const tokenPayload = JSON.parse(atob(token.split('.')[1]));
-          profileData = {
-            id: tokenPayload.userId || tokenPayload.id || tokenPayload.sub || 'user-' + Date.now(),
-            username: tokenPayload.username || tokenPayload.email || 'user',
-            email: tokenPayload.email || '',
-            name: tokenPayload.name || tokenPayload.username || 'User',
-            nim: tokenPayload.nim || tokenPayload.username || '',
-            role: tokenPayload.role || 'student'
-          };
-          console.log('Using token payload as profile data:', profileData);
-        } catch (tokenError) {
-          console.error('Failed to decode token:', tokenError);
-          // Use fallback user data
-          profileData = {
-            id: 'temp-user-' + Date.now(),
-            username: 'user',
-            email: '',
-            name: 'User',
-            nim: '',
-            role: 'student'
-          };
-          console.log('Using fallback profile data');
-        }
-      }
-
-      // Try to upload file
-      let evidenceUrl = '';
-      let uploadFailed = false;
-      try {
-        evidenceUrl = await uploadFile(formData.evidence, token);
-        console.log('File processed successfully:', evidenceUrl);
-      } catch (uploadError) {
-        console.error('Upload failed:', uploadError);
-        uploadFailed = true;
-        
-        // Ask user if they want to proceed without file attachment
-        const proceedWithoutFile = window.confirm(
-          'Gagal mengunggah file bukti kegiatan. ' + 
-          'Apakah Anda ingin tetap mengajukan kegiatan tanpa file? ' +
-          '(Anda dapat mengunggah bukti kegiatan nanti)'
-        );
-        
-        if (!proceedWithoutFile) {
-          throw new Error('Pengajuan dibatalkan. Silakan coba mengunggah file lagi.');
-        }
-        
-        // Set evidence as text description of the file
-        evidenceUrl = `File: ${formData.evidence.name} (${(formData.evidence.size / 1024 / 1024).toFixed(2)}MB) - Upload gagal, akan diupload ulang nanti`;
+      if (!evidenceUrl) {
+        throw new Error('Evidence URL is missing after upload.');
       }
       
-      // Prepare submission data according to API documentation
-      // Based on the API docs, /submissions expects: userId, eventId, evidence
-      const simpleSubmissionData = {
-        userId: profileData?.id || 'temp-user-' + Date.now(),
-        eventId: null, // For general activity submission
-        evidence: evidenceUrl || `Activity: ${formData.title} - ${formData.description}`
+      const submissionData = {
+        userId: profileData.id,
+        eventId: formData.eventId || null, // Use selected eventId or null for general activities
+        evidence: evidenceUrl
       };
-
-      // Prepare extended submission data as fallback
-      const extendedSubmissionData = {
-        ...simpleSubmissionData,
-        activityDetails: {
-          title: formData.title,
-          activityType: formData.activityType,
-          date: formData.date,
-          description: formData.description,
-          competencyArea: formData.competencyArea,
-          proposedPoints: parseInt(formData.expectedPoints) || 0,
-          additionalNotes: formData.additionalNotes
-        }
-      };
-
-      // Try the documented endpoint first with correct structure
-      const submissionAttempts = [
-        {
-          endpoint: '/submissions',
-          data: simpleSubmissionData,
-          description: 'API documented endpoint with simple structure'
+      
+      console.log('Submission data:', submissionData);
+      console.log('ProfileData:', profileData);
+      console.log('Evidence URL:', evidenceUrl);
+      console.log('Form eventId:', formData.eventId);
+      
+      // Validate submission data
+      if (!submissionData.userId || !submissionData.evidence) {
+        throw new Error('Invalid submission data: userId and evidence are required');
+      }
+      
+      // Create submission menggunakan endpoint yang benar
+      const submissionResponse = await fetch(`${API_BASE_URL}/activities`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         },
-        {
-          endpoint: '/submissions', 
-          data: extendedSubmissionData,
-          description: 'API documented endpoint with extended structure'
-        }
-      ];
-
-      let submissionSuccess = false;
-      let lastError = null;
-
-      // Try documented endpoints first with more detailed testing
-      for (const attempt of submissionAttempts) {
+        body: JSON.stringify(submissionData)
+      });
+      
+      if (!submissionResponse.ok) {
+        const errorText = await submissionResponse.text();
+        console.error('Submission failed with status:', submissionResponse.status);
+        console.error('Error response:', errorText);
+        
+        // Try to parse error response
         try {
-          console.log(`\n--- Trying ${attempt.description}: ${attempt.endpoint} ---`);
-          console.log('Request headers:', {
-            'Authorization': `Bearer ${token.substring(0, 20)}...`,
-            'Content-Type': 'application/json'
-          });
-          console.log('Request body:', JSON.stringify(attempt.data, null, 2));
-          
-          const response = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app${attempt.endpoint}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(attempt.data)
-          });
-          
-          const responseText = await response.text();
-          console.log(`Response status: ${response.status}`);
-          console.log(`Response headers:`, Object.fromEntries(response.headers.entries()));
-          console.log(`Response body (first 500 chars):`, responseText.substring(0, 500));
-          
-          if (response.ok) {
-            console.log(`✅ SUCCESS with ${attempt.description}`);
-            submissionSuccess = true;
-            break;
-          } else {
-            lastError = `${response.status}: ${responseText}`;
-            console.log(`❌ FAILED with ${attempt.description}:`, lastError);
-            
-            // If it's a 404, try to check if the server has any endpoints that work
-            if (response.status === 404) {
-              console.log('Testing if server has any working POST endpoints...');
-              
-              // Test some alternative endpoints that might exist
-              const altEndpoints = [
-                '/api/submissions',
-                '/api/student/submit', 
-                '/api/activities/submit',
-                '/student/submit-activity',
-                '/submit-activity',
-                '/api/submit',
-                '/submit'
-              ];
-              
-              for (const altEndpoint of altEndpoints) {
-                try {
-                  const altResponse = await fetch(`https://pweb-tifpoint-backend-production-1a28.up.railway.app${altEndpoint}`, {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${token}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(attempt.data)
-                  });
-                  
-                  console.log(`Alternative endpoint ${altEndpoint}: ${altResponse.status}`);
-                  
-                  if (altResponse.ok) {
-                    console.log(`✅ Found working endpoint: ${altEndpoint}`);
-                    submissionSuccess = true;
-                    break;
-                  } else if (altResponse.status !== 404) {
-                    // Not a 404, so endpoint exists but might have different requirements
-                    const altText = await altResponse.text();
-                    console.log(`Endpoint ${altEndpoint} exists but returned ${altResponse.status}:`, altText.substring(0, 200));
-                  }
-                } catch (altError) {
-                  // Silently continue to next endpoint
-                }
-              }
-              
-              if (submissionSuccess) break;
-            }
-          }
-        } catch (err) {
-          console.log(`❌ ERROR with ${attempt.description}:`, err.message);
-          lastError = err.message;
+          const errorJson = JSON.parse(errorText);
+          console.error('Parsed error:', errorJson);
+        } catch (parseError) {
+          console.error('Could not parse error response as JSON');
         }
+        
+        throw new Error(`Submission failed: ${submissionResponse.status} - ${errorText}`);
       }
-
-      if (!submissionSuccess) {
-        // Save submission data locally as fallback
-        const fallbackSubmission = {
-          id: 'draft-' + Date.now(),
-          timestamp: new Date().toISOString(),
-          formData: formData,
-          profileData: profileData,
-          evidenceUrl: evidenceUrl,
-          status: 'pending_server_sync',
-          retryCount: 0,
-          lastError: lastError
-        };
-        
-        // Get existing drafts
-        const existingDrafts = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
-        existingDrafts.push(fallbackSubmission);
-        localStorage.setItem('pendingSubmissions', JSON.stringify(existingDrafts));
-        setPendingSubmissions(existingDrafts);
-        
-        console.log('Submission saved locally as draft:', fallbackSubmission);
-        
-        // Provide more specific error messages based on the type of failure
-        if (lastError && lastError.includes('401')) {
-          localStorage.removeItem('token'); // Remove invalid token
-          throw new Error('Sesi telah berakhir. Silakan login ulang untuk melanjutkan.');
-        } else if (lastError && lastError.includes('403')) {
-          throw new Error('Anda tidak memiliki izin untuk mengajukan kegiatan. Hubungi administrator.');
-        } else if (lastError && lastError.includes('500')) {
-          throw new Error('Terjadi kesalahan server. Data Anda telah disimpan dan akan otomatis dikirim saat server pulih.');
-        } else if (lastError && lastError.includes('404')) {
-          throw new Error('Layanan pengajuan kegiatan sedang dalam maintenance. Data Anda telah disimpan dan akan otomatis dikirim nanti.');
-        } else {
-          // More detailed error message
-          throw new Error(`API endpoint tidak ditemukan atau tidak sesuai ekspektasi. Data Anda telah disimpan secara lokal.\n\nDetail teknis: ${lastError || 'Semua endpoint submission mengembalikan 404'}\n\nSilakan hubungi administrator dengan informasi ini atau gunakan tombol "Test API" untuk debugging lebih lanjut.`);
-        }
-      }
+      
+      const submissionResult = await submissionResponse.json();
+      console.log('Submission success:', submissionResult);
       
       // Success! Show success state
       setSuccess(true);
-      
-      // Show additional message if upload failed
-      if (uploadFailed) {
-        setTimeout(() => {
-          setError('Kegiatan berhasil diajukan, namun file bukti gagal diupload. Silakan hubungi admin untuk melengkapi bukti kegiatan.');
-        }, 1000);
-      }
       
       // Redirect after showing success message
       setTimeout(() => {
         navigate('/activity-history');
       }, 2000);
       
-      console.log('=== SUBMISSION DEBUG END: SUCCESS ===');
+      console.log('=== SUBMISSION COMPLETED SUCCESSFULLY ===');
       
     } catch (err) {
-      console.error('=== SUBMISSION DEBUG END: ERROR ===');
+      console.error('=== SUBMISSION FAILED ===');
       console.error('Error details:', err);
-      setError(err.message || 'Terjadi kesalahan saat mengirim data. Silakan coba lagi.');
+      
+      // Save submission data locally as fallback
+      const fallbackSubmission = {
+        id: 'draft-' + Date.now(),
+        timestamp: new Date().toISOString(),
+        formData: formData,
+        profileData: null,
+        status: 'pending_server_sync',
+        retryCount: 0,
+        lastError: err.message
+      };
+      
+      const existingDrafts = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
+      existingDrafts.push(fallbackSubmission);
+      localStorage.setItem('pendingSubmissions', JSON.stringify(existingDrafts));
+      setPendingSubmissions(existingDrafts);
+      
+      // Provide specific error messages
+      if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+        localStorage.removeItem('token');
+        setError('Sesi telah berakhir. Silakan login ulang untuk melanjutkan.');
+      } else if (err.message.includes('403') || err.message.includes('Forbidden')) {
+        setError('Anda tidak memiliki izin untuk mengajukan kegiatan. Hubungi administrator.');
+      } else if (err.message.includes('404')) {
+        setError('Endpoint tidak ditemukan. Silakan hubungi administrator untuk memperbarui sistem.');
+      } else if (err.message.includes('500')) {
+        setError('Terjadi kesalahan server. Data Anda telah disimpan dan akan otomatis dikirim saat server pulih.');
+      } else {
+        setError(err.message || 'Terjadi kesalahan saat mengirim data. Data telah disimpan secara lokal.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -859,6 +615,12 @@ const SubmitActivity = () => {
                   Test API
                 </button>
                 <button
+                  onClick={exportPendingSubmissions}
+                  className="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-md hover:bg-green-200 transition-colors duration-200"
+                >
+                  Export Data
+                </button>
+                <button
                   onClick={() => setPendingSubmissions([])}
                   className="text-sm text-yellow-600 hover:text-yellow-800 transition-colors duration-200"
                 >
@@ -893,59 +655,6 @@ const SubmitActivity = () => {
           </div>
         </div>
       )}
-      {error && error.includes('maintenance') && (
-        <div className={`max-w-3xl mx-auto mb-6 transition-all duration-500 transform ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
-          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">
-                  Troubleshooting API Issues
-                </h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <p className="mb-2">Kemungkinan penyebab masalah:</p>
-                  <ul className="list-disc list-inside space-y-1 text-xs">
-                    <li>API endpoint dalam dokumentasi belum diimplementasi</li>
-                    <li>Server sedang maintenance atau down</li>
-                    <li>Struktur data request tidak sesuai ekspektasi backend</li>
-                    <li>Authentication token bermasalah</li>
-                  </ul>
-                  <div className="mt-3 space-x-2">
-                    <button
-                      onClick={testAPIEndpoints}
-                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200 transition-colors duration-200"
-                    >
-                      🔍 Test API Endpoints
-                    </button>
-                    <button
-                      onClick={() => {
-                        console.log('Current token:', localStorage.getItem('token')?.substring(0, 50) + '...');
-                        console.log('Pending submissions:', JSON.parse(localStorage.getItem('pendingSubmissions') || '[]'));
-                      }}
-                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded hover:bg-blue-200 transition-colors duration-200"
-                    >
-                      📊 Show Debug Info
-                    </button>
-                    <button
-                      onClick={() => {
-                        localStorage.removeItem('token');
-                        alert('Token dihapus. Silakan login ulang.');
-                      }}
-                      className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded hover:bg-red-200 transition-colors duration-200"
-                    >
-                      🔄 Reset Token
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       
       {/* Main Form Card */}
       <div 
@@ -973,6 +682,41 @@ const SubmitActivity = () => {
         )}
         
         <form onSubmit={handleSubmit} className="p-6">
+          {/* Event Selection - New field */}
+          <div className={`mb-6 transition-all duration-300 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} 
+                         ${activeField === 'eventId' ? 'transform scale-[1.02]' : ''}`}>
+            <label htmlFor="eventId" className="block text-sm font-medium text-gray-700 mb-1">
+              Pilih Event (Opsional)
+            </label>
+            <select
+              id="eventId"
+              name="eventId"
+              value={formData.eventId}
+              onChange={handleChange}
+              onFocus={() => handleFocus('eventId')}
+              onBlur={handleBlur}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md 
+                        focus:ring-[#201E43] focus:border-[#201E43] 
+                        transition-all duration-300 
+                        focus:shadow-md"
+              disabled={loadingEvents}
+            >
+              <option value="">Kegiatan Umum (Tidak terkait event tertentu)</option>
+              {loadingEvents ? (
+                <option value="">Memuat daftar event...</option>
+              ) : (
+                events.map(event => (
+                  <option key={event.id} value={event.id}>
+                    {event.title} - {event.pointValue} poin ({new Date(event.date).toLocaleDateString()})
+                  </option>
+                ))
+              )}
+            </select>
+            <p className="mt-1 text-sm text-gray-500">
+              Pilih event jika kegiatan Anda terkait dengan event tertentu yang sudah terdaftar
+            </p>
+          </div>
+
           {/* Activity Title */}
           <div className={`mb-6 transition-all duration-300 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} 
                          ${activeField === 'title' ? 'transform scale-[1.02]' : ''}`}>

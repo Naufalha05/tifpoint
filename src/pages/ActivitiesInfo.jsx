@@ -10,29 +10,18 @@ const ActivitiesInfo = () => {
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        // Get token from localStorage
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          setError('Sesi login telah berakhir. Silakan login kembali.');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Fetch activities from API
-        const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/activity-info', {
+        // Fetch events from API - sesuai dokumentasi, GET /events tidak perlu token
+        const response = await fetch('https://tifpoint-production.up.railway.app/api/events', {
           headers: { 
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
         
         if (!response.ok) {
-          // Try to parse error as JSON, but handle non-JSON responses too
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to fetch activities');
+            throw new Error(errorData.message || 'Failed to fetch events');
           } else {
             throw new Error(`Error: ${response.status} ${response.statusText}`);
           }
@@ -40,15 +29,16 @@ const ActivitiesInfo = () => {
         
         const data = await response.json();
         
-        // Transform data if needed
-        const transformedActivities = Array.isArray(data.activities || data)
-          ? (data.activities || data).map(activity => ({
-              id: activity._id,
-              title: activity.title || activity.activityName,
-              type: activity.type || activity.activityType,
-              date: activity.date || activity.activityDate,
-              points: activity.points || 0,
-              description: activity.description
+        // Transform data sesuai struktur API events
+        const transformedActivities = Array.isArray(data)
+          ? data.map(event => ({
+              id: event.id,
+              title: event.title,
+              type: 'Event', // Default type untuk events
+              date: event.date,
+              points: event.pointValue,
+              description: event.description,
+              location: event.location
             }))
           : [];
         
@@ -111,7 +101,7 @@ const ActivitiesInfo = () => {
         >
           <h2 className="text-3xl md:text-4xl font-bold text-[#134B70] mb-3">Info Kegiatan</h2>
           <p className="text-lg text-[#134B70]/90 max-w-3xl">
-            Temukan daftar kursus terekognisi dan kegiatan kampus yang akan datang.
+            Temukan daftar kegiatan dan event yang tersedia untuk mendapatkan poin TIF.
           </p>
         </section>
         
@@ -139,15 +129,33 @@ const ActivitiesInfo = () => {
                   ${showAnimation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
                   style={{ transitionDelay: `${index * 150}ms` }}
                 >
-                  <div className="flex justify-between items-center flex-wrap">
-                    <div className="transition-all duration-300 hover:translate-x-1 mb-2 md:mb-0">
-                      <h3 className="text-xl font-semibold text-[#134B70]">{activity.title}</h3>
-                      <p className="text-sm text-gray-500">{activity.type} - {new Date(activity.date).toLocaleDateString()}</p>
-                      <p className="text-gray-600 mt-2">{activity.description}</p>
+                  <div className="flex justify-between items-start flex-wrap">
+                    <div className="transition-all duration-300 hover:translate-x-1 mb-2 md:mb-0 flex-1">
+                      <h3 className="text-xl font-semibold text-[#134B70] mb-1">{activity.title}</h3>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          {activity.type}
+                        </span>
+                        <span className="text-sm text-gray-600">
+                          {new Date(activity.date).toLocaleDateString('id-ID', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                      {activity.location && (
+                        <p className="text-sm text-gray-500 mb-2">
+                          📍 {activity.location}
+                        </p>
+                      )}
+                      <p className="text-gray-600">{activity.description}</p>
                     </div>
-                    <span className="bg-[#201E43] text-white px-3 py-1 rounded-lg transition-all duration-300 hover:bg-[#134B70] hover:shadow-md">
-                      {activity.points} Poin
-                    </span>
+                    <div className="ml-4">
+                      <span className="bg-[#201E43] text-white px-3 py-1 rounded-lg transition-all duration-300 hover:bg-[#134B70] hover:shadow-md whitespace-nowrap">
+                        {activity.points} Poin
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}

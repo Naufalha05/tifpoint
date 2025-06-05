@@ -10,29 +10,18 @@ const Competencies = () => {
   useEffect(() => {
     const fetchCompetencies = async () => {
       try {
-        // Get token from localStorage
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          setError('Sesi login telah berakhir. Silakan login kembali.');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Fetch competencies from API
-        const response = await fetch('https://pweb-tifpoint-backend-production-1a28.up.railway.app/api/competencies', {
+        // Fetch recognized courses from API - sesuai dokumentasi, GET /recognized-courses tidak perlu token
+        const response = await fetch('https://tifpoint-production.up.railway.app/api/recognized-courses', {
           headers: { 
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
         
         if (!response.ok) {
-          // Try to parse error as JSON, but handle non-JSON responses too
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to fetch competencies');
+            throw new Error(errorData.message || 'Failed to fetch recognized courses');
           } else {
             throw new Error(`Error: ${response.status} ${response.statusText}`);
           }
@@ -40,13 +29,16 @@ const Competencies = () => {
         
         const data = await response.json();
         
-        // Transform data if needed
-        const transformedCompetencies = Array.isArray(data.competencies || data)
-          ? (data.competencies || data).map(comp => ({
-              id: comp._id,
-              title: comp.title || comp.name,
-              description: comp.description,
-              points: comp.points || comp.pointsDescription || 'Nilai bervariasi'
+        // Transform data sesuai struktur API recognized-courses
+        const transformedCompetencies = Array.isArray(data)
+          ? data.map(course => ({
+              id: course.id,
+              title: course.name,
+              description: `Provider: ${course.provider} | Durasi: ${course.duration} jam`,
+              points: `${course.pointValue} poin`,
+              url: course.url,
+              provider: course.provider,
+              duration: course.duration
             }))
           : [];
         
@@ -54,7 +46,7 @@ const Competencies = () => {
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching competencies:', error);
-        setError('Gagal memuat data kompetensi: ' + error.message);
+        setError('Gagal memuat data kursus terekognisi: ' + error.message);
         setIsLoading(false);
       }
     };
@@ -191,7 +183,7 @@ const Competencies = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            Info Kompetensi
+            Kursus Terekognisi
           </motion.h2>
           <motion.p 
             className="text-lg text-[#134B70]/90 max-w-3xl"
@@ -199,7 +191,7 @@ const Competencies = () => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.4 }}
           >
-            Pelajari berbagai kompetensi yang tersedia dan cara mendapatkan poin untuk masing-masing kompetensi.
+            Pelajari berbagai kursus terekognisi yang tersedia dan cara mendapatkan poin untuk masing-masing kursus.
           </motion.p>
         </motion.section>
 
@@ -236,14 +228,14 @@ const Competencies = () => {
                   ease: "linear"
                 }}
               />
-              <p className="mt-4 text-[#134B70]">Memuat data kompetensi...</p>
+              <p className="mt-4 text-[#134B70]">Memuat data kursus terekognisi...</p>
             </motion.div>
           ) : competencies.length === 0 ? (
             <motion.div 
               className="text-center text-gray-500 py-12"
               variants={itemVariants}
             >
-              Belum ada data kompetensi.
+              Belum ada data kursus terekognisi.
             </motion.div>
           ) : (
             <motion.div 
@@ -282,16 +274,23 @@ const Competencies = () => {
                   >
                     {competency.title}
                   </motion.h3>
-                  <motion.p 
-                    className="text-gray-600 mb-2 relative z-10"
+                  
+                  <motion.div
+                    className="space-y-2 mb-4 relative z-10"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 + index * 0.1 }}
                   >
-                    {competency.description}
-                  </motion.p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Provider:</span> {competency.provider}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Durasi:</span> {competency.duration} jam
+                    </p>
+                  </motion.div>
+
                   <motion.div
-                    className="relative z-10 mt-4"
+                    className="relative z-10 flex items-center justify-between"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 + index * 0.1, duration: 0.3 }}
@@ -303,6 +302,22 @@ const Competencies = () => {
                     >
                       {competency.points}
                     </motion.span>
+                    
+                    {competency.url && (
+                      <motion.a
+                        href={competency.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-1 bg-[#134B70] text-white text-sm rounded-full hover:bg-[#201E43] transition-colors duration-200"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Kunjungi
+                      </motion.a>
+                    )}
                   </motion.div>
                 </motion.div>
               ))}

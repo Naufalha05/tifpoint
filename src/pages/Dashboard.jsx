@@ -47,7 +47,7 @@ const Dashboard = () => {
         }
         
         // Fetch additional dashboard data from the server
-        const response = await fetch('/api/dashboard', {
+        const response = await fetch('/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
