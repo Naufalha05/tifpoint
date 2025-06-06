@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const DashboardNavbar = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -6,6 +7,8 @@ const DashboardNavbar = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -66,9 +69,9 @@ const DashboardNavbar = () => {
       setShowSuccessMessage(true);
       setIsLoggingOut(false);
       
-      // Redirect to login page
+      // Navigate to login page using React Router
       setTimeout(() => {
-        window.location.href = '/login';
+        navigate('/login', { replace: true });
       }, 2000);
     }
   };
@@ -170,7 +173,7 @@ const DashboardNavbar = () => {
       <div className="bg-[#201E43] w-full shadow-md py-3 mb-5">
         <div className="container mx-auto flex items-center justify-between px-4">
           <div className="flex items-center">
-            <a href="/dashboard" className="flex items-center space-x-2 group">
+            <Link to="/dashboard" className="flex items-center space-x-2 group">
               <div className="relative overflow-hidden rounded-lg">
                 <img 
                   src="/logo.png" 
@@ -185,7 +188,7 @@ const DashboardNavbar = () => {
                 </span>
                 <span className="text-xs text-[#508C9B] hidden sm:block">Integrated Point System</span>
               </div>
-            </a>
+            </Link>
           </div>
           
           <div className="flex items-center">
@@ -210,8 +213,20 @@ const DashboardNavbar = () => {
               {isProfileMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50 animate-dropdown">
                   <div className="py-2">
-                    <a href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Lihat Profil</a>
-                    <a href="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Pengaturan</a>
+                    <Link 
+                      to="/profile" 
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                    >
+                      Lihat Profil
+                    </Link>
+                    <Link 
+                      to="/settings" 
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                    >
+                      Pengaturan
+                    </Link>
                     <hr className="my-1" />
                     <button 
                       onClick={handleLogout}
