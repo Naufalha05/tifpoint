@@ -10,10 +10,10 @@ const SubmitActivity = () => {
     date: '',
     description: '',
     competencyArea: '',
-    expectedPoints: '',
     evidence: null,
     additionalNotes: '',
-    eventId: '' // Added eventId field
+    eventId: '', // Added eventId field
+    recognizedCourseId: '' // Added recognizedCourseId field
   });
   const [preview, setPreview] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -23,6 +23,10 @@ const SubmitActivity = () => {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [events, setEvents] = useState([]); // State untuk events
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [competencies, setCompetencies] = useState([]); // State untuk competencies
+  const [activityTypesData, setActivityTypesData] = useState([]); // State untuk activity types
+  const [recognizedCourses, setRecognizedCourses] = useState([]); // State untuk recognized courses
+  const [loadingData, setLoadingData] = useState(false);
 
   // Base URL for API - Mixed endpoints (some with /api prefix, some without)
   const API_BASE_URL = 'https://tifpoint-production.up.railway.app/api';
@@ -33,19 +37,39 @@ const SubmitActivity = () => {
     // Load pending submissions
     const stored = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
     setPendingSubmissions(stored);
-    // Load events saat component mount
-    loadEvents();
+    // Load all required data saat component mount
+    loadAllData();
   }, []);
 
-  // Function to load events from API
-  const loadEvents = async () => {
-    setLoadingEvents(true);
+  // Function to load all required data from API
+  const loadAllData = async () => {
+    setLoadingData(true);
     try {
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('Token tidak ditemukan. Silakan login terlebih dahulu.');
       }
 
+      // Load events, competencies, activity types, and recognized courses in parallel
+      await Promise.all([
+        loadEvents(token),
+        loadCompetencies(token),
+        loadActivityTypes(token),
+        loadRecognizedCourses(token)
+      ]);
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setError('Gagal memuat data. ' + error.message);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  // Function to load events from API
+  const loadEvents = async (token) => {
+    setLoadingEvents(true);
+    try {
       const response = await fetch(`${API_BASE_URL}/events`, {
         method: 'GET',
         headers: {
@@ -63,9 +87,95 @@ const SubmitActivity = () => {
       console.log('Events loaded:', eventsData);
     } catch (error) {
       console.error('Error loading events:', error);
-      setError('Gagal memuat daftar event. ' + error.message);
+      // Don't throw error, just log it as events are optional
     } finally {
       setLoadingEvents(false);
+    }
+  };
+
+  // Function to load competencies from API
+  const loadCompetencies = async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/competencies`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load competencies: ${response.status}`);
+      }
+
+      const competenciesData = await response.json();
+      setCompetencies(competenciesData);
+      console.log('Competencies loaded:', competenciesData);
+    } catch (error) {
+      console.error('Error loading competencies:', error);
+      // Fallback to static data if API fails
+      setCompetencies([
+        { id: 'software-dev', name: 'Software Developer' },
+        { id: 'network', name: 'Network' },
+        { id: 'ai', name: 'Artificial Intelligence' },
+        { id: 'softskills', name: 'Soft Skills' }
+      ]);
+    }
+  };
+
+  // Function to load activity types from API
+  const loadActivityTypes = async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/activity-types`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load activity types: ${response.status}`);
+      }
+
+      const activityTypesData = await response.json();
+      setActivityTypesData(activityTypesData);
+      console.log('Activity Types loaded:', activityTypesData);
+    } catch (error) {
+      console.error('Error loading activity types:', error);
+      // Fallback to static data if API fails
+      setActivityTypesData([
+        { id: 'seminar', name: 'Seminar', points: '2-4' },
+        { id: 'course', name: 'Kursus', points: '4-8' },
+        { id: 'program', name: 'Program', points: '5-10' },
+        { id: 'research', name: 'Riset', points: '8-12' },
+        { id: 'achievement', name: 'Prestasi', points: '6-15' }
+      ]);
+    }
+  };
+
+  // Function to load recognized courses from API
+  const loadRecognizedCourses = async (token) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/recognized-courses`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load recognized courses: ${response.status}`);
+      }
+
+      const recognizedCoursesData = await response.json();
+      setRecognizedCourses(recognizedCoursesData);
+      console.log('Recognized Courses loaded:', recognizedCoursesData);
+    } catch (error) {
+      console.error('Error loading recognized courses:', error);
+      // Set empty array if API fails (recognized courses are optional)
+      setRecognizedCourses([]);
     }
   };
 
@@ -96,9 +206,9 @@ const SubmitActivity = () => {
           date: submission.formData.date,
           description: submission.formData.description,
           competencyArea: submission.formData.competencyArea,
-          proposedPoints: submission.formData.expectedPoints,
           additionalNotes: submission.formData.additionalNotes,
-          eventId: submission.formData.eventId
+          eventId: submission.formData.eventId,
+          recognizedCourseId: submission.formData.recognizedCourseId
         },
         evidence: {
           fileName: submission.formData.evidence?.name || 'Unknown',
@@ -142,6 +252,8 @@ const SubmitActivity = () => {
     const testCases = [
       // Test endpoints sesuai dokumentasi API
       { method: 'GET', path: '/events', requiresAuth: true },
+      { method: 'GET', path: '/competencies', requiresAuth: true },
+      { method: 'GET', path: '/activity-types', requiresAuth: true },
       { method: 'GET', path: '/recognized-courses', requiresAuth: true },
       { method: 'GET', path: '/auth/profile', requiresAuth: true },
       { method: 'GET', path: '/activities', requiresAuth: true },
@@ -188,19 +300,24 @@ const SubmitActivity = () => {
 
     for (const submission of stored) {
       try {
-        // Fixed endpoint path - menggunakan /api/submission sesuai permintaan user
-        const response = await fetch(`${API_BASE_URL}/activities
-          `, {
+        // Create proper submission data according to API docs
+        const submissionData = {
+          title: submission.formData.title,
+          description: submission.formData.description,
+          competencyId: submission.formData.competencyArea,
+          activityTypeId: submission.formData.activityType,
+          documentUrl: submission.evidenceUrl,
+          recognizedCourseId: submission.formData.recognizedCourseId || null,
+          eventId: submission.formData.eventId || null
+        };
+
+        const response = await fetch(`${API_BASE_URL}/activities`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            userId: submission.profileData?.id || 'temp-user',
-            eventId: submission.formData.eventId || null,
-            evidence: submission.evidenceUrl || `Activity: ${submission.formData.title}`
-          })
+          body: JSON.stringify(submissionData)
         });
 
         if (response.ok) {
@@ -233,21 +350,6 @@ const SubmitActivity = () => {
     localStorage.setItem('pendingSubmissions', JSON.stringify(filtered));
     setPendingSubmissions(filtered);
   };
-
-  const activityTypes = [
-    { id: 'seminar', name: 'Seminar', points: '2-4' },
-    { id: 'course', name: 'Kursus', points: '4-8' },
-    { id: 'program', name: 'Program', points: '5-10' },
-    { id: 'research', name: 'Riset', points: '8-12' },
-    { id: 'achievement', name: 'Prestasi', points: '6-15' }
-  ];
-
-  const competencyAreas = [
-    { id: 'software-dev', name: 'Software Developer' },
-    { id: 'network', name: 'Network' },
-    { id: 'ai', name: 'Artificial Intelligence' },
-    { id: 'softskills', name: 'Soft Skills' }
-  ];
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -386,46 +488,47 @@ const SubmitActivity = () => {
         throw new Error('Token tidak valid. Silakan login ulang.');
       }
 
-      // Validate required fields - eventId now optional for general activities
-      if (!formData.title || !formData.activityType || !formData.date || 
-          !formData.description || !formData.competencyArea || !formData.evidence) {
-        throw new Error('Semua field yang wajib harus diisi, termasuk bukti kegiatan.');
+      // Validate required fields according to API documentation
+      if (!formData.title || !formData.activityType || !formData.description || 
+          !formData.competencyArea || !formData.evidence) {
+        throw new Error('Field wajib: judul, jenis kegiatan, deskripsi, area kompetensi, dan bukti kegiatan harus diisi.');
       }
 
-      // Step 1: Get user profile
-      console.log('Step 1: Getting user profile...');
+      // Step 1: Get user profile (not needed for submission but for logging)
+      console.log('Step 1: Getting user profile for logging...');
       const profileData = await getUserProfile(token);
       
       // Step 2: Upload file
       console.log('Step 2: Uploading evidence file...');
-      const evidenceUrl = await uploadFile(formData.evidence, token);
+      const documentUrl = await uploadFile(formData.evidence, token);
       
-      // Step 3: Create submission
+      // Step 3: Create submission with correct data structure
       console.log('Step 3: Creating submission...');
       
-      // Validate required data before creating submission
-      if (!profileData || !profileData.id) {
-        throw new Error('User profile data is invalid. Missing user ID.');
+      if (!documentUrl) {
+        throw new Error('Document URL is missing after upload.');
       }
       
-      if (!evidenceUrl) {
-        throw new Error('Evidence URL is missing after upload.');
-      }
-      
+      // Create submission data according to API documentation
       const submissionData = {
-        userId: profileData.id,
-        eventId: formData.eventId || null, // Use selected eventId or null for general activities
-        evidence: evidenceUrl
+        title: formData.title,
+        description: formData.description,
+        competencyId: formData.competencyArea,
+        activityTypeId: formData.activityType,
+        documentUrl: documentUrl,
+        recognizedCourseId: formData.recognizedCourseId || null,
+        eventId: formData.eventId || null
       };
       
       console.log('Submission data:', submissionData);
       console.log('ProfileData:', profileData);
-      console.log('Evidence URL:', evidenceUrl);
-      console.log('Form eventId:', formData.eventId);
+      console.log('Document URL:', documentUrl);
       
       // Validate submission data
-      if (!submissionData.userId || !submissionData.evidence) {
-        throw new Error('Invalid submission data: userId and evidence are required');
+      if (!submissionData.title || !submissionData.description || 
+          !submissionData.competencyId || !submissionData.activityTypeId || 
+          !submissionData.documentUrl) {
+        throw new Error('Invalid submission data: required fields are missing');
       }
       
       // Create submission menggunakan endpoint yang benar
@@ -447,15 +550,27 @@ const SubmitActivity = () => {
         try {
           const errorJson = JSON.parse(errorText);
           console.error('Parsed error:', errorJson);
+          throw new Error(`Submission failed: ${errorJson.message || errorText}`);
         } catch (parseError) {
           console.error('Could not parse error response as JSON');
+          throw new Error(`Submission failed: ${submissionResponse.status} - ${errorText}`);
         }
-        
-        throw new Error(`Submission failed: ${submissionResponse.status} - ${errorText}`);
       }
       
       const submissionResult = await submissionResponse.json();
       console.log('Submission success:', submissionResult);
+      
+      // Trigger event untuk refresh ActivityHistory
+      const activitySubmittedEvent = new CustomEvent('activitySubmitted', {
+        detail: {
+          activityId: submissionResult.activity?.id,
+          timestamp: new Date().toISOString()
+        }
+      });
+      window.dispatchEvent(activitySubmittedEvent);
+
+      // Also set storage trigger
+      localStorage.setItem('activitySubmitted', Date.now().toString());
       
       // Success! Show success state
       setSuccess(true);
@@ -584,6 +699,27 @@ const SubmitActivity = () => {
         </Link>
       </div>
 
+      {/* Loading Data Notice */}
+      {loadingData && (
+        <div className={`max-w-3xl mx-auto mb-6 transition-all duration-500 transform ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="animate-spin h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-blue-800">
+                  Memuat data sistem... Mohon tunggu sebentar.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pending Submissions Notice */}
       {pendingSubmissions.length > 0 && (
         <div className={`max-w-3xl mx-auto mb-6 transition-all duration-500 transform ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
@@ -664,6 +800,7 @@ const SubmitActivity = () => {
         <div className="bg-[#201E43] py-4 px-6 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#3a3876]/20 to-transparent animate-shimmer"></div>
           <h2 className="text-xl font-bold text-white relative z-10">Ajukan Kegiatan Baru</h2>
+          <p className="text-blue-100 mt-1 text-sm relative z-10">Admin akan menentukan poin berdasarkan jenis kegiatan dan kursus yang dipilih</p>
         </div>
         
         {error && (
@@ -682,7 +819,7 @@ const SubmitActivity = () => {
         )}
         
         <form onSubmit={handleSubmit} className="p-6">
-          {/* Event Selection - New field */}
+          {/* Event Selection - Optional field */}
           <div className={`mb-6 transition-all duration-300 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} 
                          ${activeField === 'eventId' ? 'transform scale-[1.02]' : ''}`}>
             <label htmlFor="eventId" className="block text-sm font-medium text-gray-700 mb-1">
@@ -714,6 +851,37 @@ const SubmitActivity = () => {
             </select>
             <p className="mt-1 text-sm text-gray-500">
               Pilih event jika kegiatan Anda terkait dengan event tertentu yang sudah terdaftar
+            </p>
+          </div>
+
+          {/* Recognized Course Selection - Optional field */}
+          <div className={`mb-6 transition-all duration-300 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} 
+                         ${activeField === 'recognizedCourseId' ? 'transform scale-[1.02]' : ''}`}>
+            <label htmlFor="recognizedCourseId" className="block text-sm font-medium text-gray-700 mb-1">
+              Pilih Kursus Terakreditasi (Opsional)
+            </label>
+            <select
+              id="recognizedCourseId"
+              name="recognizedCourseId"
+              value={formData.recognizedCourseId}
+              onChange={handleChange}
+              onFocus={() => handleFocus('recognizedCourseId')}
+              onBlur={handleBlur}
+              className="w-full px-4 py-2 border border-gray-300 rounded-md 
+                        focus:ring-[#201E43] focus:border-[#201E43] 
+                        transition-all duration-300 
+                        focus:shadow-md"
+              disabled={loadingData}
+            >
+              <option value="">Tidak terkait kursus terakreditasi</option>
+              {recognizedCourses.map(course => (
+                <option key={course.id} value={course.id}>
+                  {course.name} - {course.provider} ({course.pointValue} poin)
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-sm text-gray-500">
+              Pilih jika kegiatan Anda terkait dengan kursus yang sudah diakui institusi
             </p>
           </div>
 
@@ -758,11 +926,12 @@ const SubmitActivity = () => {
                         focus:ring-[#201E43] focus:border-[#201E43] 
                         transition-all duration-300 
                         focus:shadow-md"
+              disabled={loadingData}
             >
               <option value="" disabled>Pilih jenis kegiatan</option>
-              {activityTypes.map(type => (
+              {activityTypesData.map(type => (
                 <option key={type.id} value={type.id}>
-                  {type.name} (Estimasi: {type.points} poin)
+                  {type.name} {type.points && `(Estimasi: ${type.points} poin)`}
                 </option>
               ))}
             </select>
@@ -810,10 +979,11 @@ const SubmitActivity = () => {
                           focus:ring-[#201E43] focus:border-[#201E43] 
                           transition-all duration-300 
                           focus:shadow-md"
+                disabled={loadingData}
               >
                 <option value="" disabled>Pilih area kompetensi</option>
-                {competencyAreas.map(area => (
-                  <option key={area.id} value={area.id}>{area.name}</option>
+                {competencies.map(competency => (
+                  <option key={competency.id} value={competency.id}>{competency.name}</option>
                 ))}
               </select>
             </div>
@@ -840,33 +1010,6 @@ const SubmitActivity = () => {
                         focus:shadow-md"
               placeholder="Jelaskan secara singkat tentang kegiatan yang diikuti..."
             ></textarea>
-          </div>
-          
-          {/* Expected Points */}
-          <div className={`mb-6 transition-all duration-300 delay-400 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} 
-                         ${activeField === 'expectedPoints' ? 'transform scale-[1.02]' : ''}`}>
-            <label htmlFor="expectedPoints" className="block text-sm font-medium text-gray-700 mb-1">
-              Usulan Poin
-            </label>
-            <input
-              type="number"
-              id="expectedPoints"
-              name="expectedPoints"
-              min="1"
-              max="15"
-              value={formData.expectedPoints}
-              onChange={handleChange}
-              onFocus={() => handleFocus('expectedPoints')}
-              onBlur={handleBlur}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md 
-                        focus:ring-[#201E43] focus:border-[#201E43] 
-                        transition-all duration-300 
-                        focus:shadow-md"
-              placeholder="Berdasarkan panduan poin"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Usulan poin akan ditinjau oleh admin berdasarkan pedoman konversi kegiatan
-            </p>
           </div>
           
           {/* Evidence Upload */}
@@ -1000,12 +1143,12 @@ const SubmitActivity = () => {
           <div className={`flex justify-end transition-all duration-300 delay-700 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || loadingData}
               className={`px-6 py-2 bg-[#201E43] text-white rounded-md 
                         hover:bg-[#201E43]/80 transition-all duration-300 
                         transform hover:scale-105 hover:shadow-lg 
                         flex items-center relative overflow-hidden
-                        ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        ${isSubmitting || loadingData ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
               <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shine"></span>
               {isSubmitting ? (
@@ -1015,6 +1158,14 @@ const SubmitActivity = () => {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   Mengirim...
+                </>
+              ) : loadingData ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Memuat Data...
                 </>
               ) : (
                 'Ajukan Kegiatan'

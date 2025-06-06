@@ -11,11 +11,23 @@ const Dashboard = () => {
     name: '',
     nim: '',
     totalPoints: 0,
-    maxPoints: 36,
-    activities: { total: 0, approved: 0, pending: 0, rejected: 0 }
+    targetPoints: 36,
+    completionPercentage: 0,
+    remainingPoints: 36,
+    isCompleted: false,
+    activities: { 
+      total: 0, 
+      approved: 0, 
+      pending: 0, 
+      rejected: 0 
+    }
   });
   const [recentActivities, setRecentActivities] = useState([]);
+  const [pointsByCompetency, setPointsByCompetency] = useState([]);
   const [error, setError] = useState(null);
+
+  // Base URL for API
+  const API_BASE_URL = 'https://tifpoint-production.up.railway.app/api';
 
   useEffect(() => {
     const checkAuthentication = () => {
@@ -46,34 +58,73 @@ const Dashboard = () => {
           }));
         }
         
-        // Fetch additional dashboard data from the server
-        const response = await fetch('/profile', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch dashboard data');
-        }
-        
-        const data = await response.json();
-        
-        // Update state with combined user data (localStorage + API response)
-        setUserData({
-          username: localUserData.username || data.username || '',
-          name: localUserData.name || data.name || 'Mahasiswa',
-          nim: localUserData.nim || data.nim || '',
-          totalPoints: data.totalPoints || 0,
-          maxPoints: 36,
-          activities: {
-            total: data.activities?.total || 0,
-            approved: data.activities?.approved || 0,
-            pending: data.activities?.pending || 0,
-            rejected: data.activities?.rejected || 0
+        // Fetch dashboard data from the correct student endpoint
+        const response = await fetch(`${API_BASE_URL}/dashboard/student`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
         });
         
-        setRecentActivities(data.recentActivities || []);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch dashboard data: ${response.status} - ${errorText}`);
+        }
+        
+        const dashboardData = await response.json();
+        console.log('Dashboard data received:', dashboardData);
+        
+        // Count activities by status
+        const activityCounts = {
+          total: dashboardData.activityHistory?.length || 0,
+          approved: dashboardData.approvedActivitiesCount || 0,
+          pending: dashboardData.pendingActivitiesCount || 0,
+          rejected: 0 // Calculate from activity history if available
+        };
+
+        // Calculate rejected count from activity history
+        if (dashboardData.activityHistory) {
+          activityCounts.rejected = dashboardData.activityHistory.filter(
+            activity => activity.status === 'REJECTED'
+          ).length;
+        }
+        
+        // Update state with dashboard data
+        setUserData({
+          username: localUserData.username || dashboardData.username || '',
+          name: localUserData.name || dashboardData.name || 'Mahasiswa',
+          nim: localUserData.nim || dashboardData.nim || '',
+          totalPoints: dashboardData.totalPoints || 0,
+          targetPoints: dashboardData.targetPoints || 36,
+          completionPercentage: dashboardData.completionPercentage || 0,
+          remainingPoints: dashboardData.remainingPoints || 36,
+          isCompleted: dashboardData.isCompleted || false,
+          activities: activityCounts
+        });
+        
+        // Set recent activities - take last 5 activities and format them
+        const formattedRecentActivities = (dashboardData.activityHistory || [])
+          .slice(0, 5) // Take latest 5 activities
+          .map(activity => ({
+            id: activity.id,
+            text: `${activity.title} - ${activity.competency?.name || 'Unknown'} (${activity.activityType?.name || 'Unknown'})`,
+            type: activity.status,
+            points: activity.point || 0,
+            date: new Date(activity.createdAt).toLocaleDateString('id-ID', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }),
+            status: activity.status
+          }));
+        
+        setRecentActivities(formattedRecentActivities);
+        
+        // Set points by competency
+        setPointsByCompetency(dashboardData.pointsByCompetency || []);
+        
         setIsLoaded(true);
+        
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         
@@ -93,7 +144,7 @@ const Dashboard = () => {
           console.error('Error retrieving data from localStorage:', localStorageError);
         }
         
-        setError('Gagal memuat data. Silakan coba lagi nanti.');
+        setError(`Gagal memuat data dashboard: ${error.message}`);
         setIsLoaded(true);
       }
     };
@@ -153,7 +204,7 @@ const Dashboard = () => {
     }
   ];
 
-  const pointPercentage = Math.floor((userData.totalPoints / userData.maxPoints) * 100);
+  const pointPercentage = Math.floor(userData.completionPercentage);
 
   const renderActivityIcon = (type) => {
     switch(type) {
@@ -180,6 +231,19 @@ const Dashboard = () => {
         );
       default:
         return null;
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch(status) {
+      case 'APPROVED':
+        return 'disetujui';
+      case 'PENDING':
+        return 'menunggu persetujuan admin';
+      case 'REJECTED':
+        return 'ditolak';
+      default:
+        return 'status tidak diketahui';
     }
   };
 
@@ -284,7 +348,7 @@ const Dashboard = () => {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <p className="text-[#134B70] font-medium">Memuat data...</p>
+          <p className="text-[#134B70] font-medium">Memuat data dashboard...</p>
         </div>
       </div>
     );
@@ -313,14 +377,14 @@ const Dashboard = () => {
       </div>
 
       <motion.main 
-        className="relative z-10 container mx-auto px-4 py-6 sm:px-6 lg:px-8 pt-" // Added padding-top to account for fixed navbar
+        className="relative z-10 container mx-auto px-4 py-6 sm:px-6 lg:px-8"
         initial="hidden"
         animate="visible"
         variants={containerVariants}
       >
         {error && (
           <motion.div 
-            className="mb-6 bg-red-50 border-l-4 border-red-500 p-4"
+            className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg"
             variants={itemVariants}
           >
             <div className="flex">
@@ -331,6 +395,7 @@ const Dashboard = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-red-700">{error}</p>
+                <p className="text-xs text-red-600 mt-1">Data yang ditampilkan mungkin tidak terkini. Silakan coba refresh halaman.</p>
               </div>
             </div>
           </motion.div>
@@ -361,6 +426,16 @@ const Dashboard = () => {
           >
             NIM: {userData.nim}
           </motion.p>
+          {userData.isCompleted && (
+            <motion.div 
+              className="mt-3 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+            >
+              🎉 Selamat! Anda telah mencapai target point minimum
+            </motion.div>
+          )}
         </motion.section>
 
         <motion.section 
@@ -385,13 +460,16 @@ const Dashboard = () => {
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.5 }}
                     >
-                      {userData.totalPoints} / {userData.maxPoints} Point
+                      {userData.totalPoints} / {userData.targetPoints} Point
                     </motion.span>
                   ) : (
                     "Loading..."
                   )}
                 </motion.h4>
-                <p className="text-gray-600">Target minimum untuk lulus: {userData.maxPoints} point</p>
+                <p className="text-gray-600">Target minimum untuk lulus: {userData.targetPoints} point</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Sisa {userData.remainingPoints} point lagi untuk mencapai target
+                </p>
               </div>
               <motion.div
                 className="mt-4 md:mt-0 px-4 py-2 bg-[#201E43] text-white rounded-lg font-medium"
@@ -406,6 +484,8 @@ const Dashboard = () => {
               <motion.div 
                 className="bg-[#201E43] h-4 rounded-full"
                 variants={progressVariants}
+                initial="hidden"
+                animate="visible"
               ></motion.div>
             </div>
             <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -479,6 +559,33 @@ const Dashboard = () => {
           </div>
         </motion.section>
 
+        {/* Points by Competency Section */}
+        {pointsByCompetency.length > 0 && (
+          <motion.section 
+            className="mb-12 bg-white/30 backdrop-blur-sm rounded-xl shadow-lg p-6"
+            variants={itemVariants}
+            whileHover={{ boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)" }}
+            transition={{ duration: 0.3 }}
+          >
+            <h3 className="text-xl font-semibold text-[#134B70] mb-4">Distribusi Point per Kompetensi</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pointsByCompetency.map((item, index) => (
+                <motion.div
+                  key={index}
+                  className="bg-white/60 p-4 rounded-lg border border-blue-200"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1, duration: 0.3 }}
+                  whileHover={{ scale: 1.02 }}
+                >
+                  <h4 className="font-medium text-[#134B70] mb-2">{item.competency}</h4>
+                  <p className="text-2xl font-bold text-[#201E43]">{item.points} point</p>
+                </motion.div>
+              ))}
+            </div>
+          </motion.section>
+        )}
+
         <motion.section 
           className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12"
           variants={itemVariants}
@@ -494,7 +601,7 @@ const Dashboard = () => {
               <Link to={card.path} className="block h-full">
                 <div className="p-6 flex flex-col h-full">
                   <motion.div 
-                    className="mb-4 p-3 rounded-full bg-[#ffffff20] w-fit"
+                    className="mb-4 p-3 rounded-full bg-[#ffffff20] w-fit text-white"
                     whileHover={{ 
                       rotate: 360, 
                       backgroundColor: "rgba(255, 255, 255, 0.3)" 
@@ -540,24 +647,26 @@ const Dashboard = () => {
                   custom={index}
                   variants={activityVariants}
                   whileHover="hover"
-                  className="flex items-start p-3 bg-white/60 rounded-lg"
+                  className="flex items-start p-4 bg-white/60 rounded-lg border border-gray-100"
                 >
                   <motion.div 
-                    className={`min-w-10 w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
-                      activity.type === 'approved' || activity.type === 'APPROVED' ? 'bg-green-100' :
-                      activity.type === 'pending' || activity.type === 'PENDING' ? 'bg-yellow-100' : 'bg-red-100'
+                    className={`min-w-10 w-10 h-10 rounded-full flex items-center justify-center mr-4 ${
+                      activity.type === 'APPROVED' ? 'bg-green-100' :
+                      activity.type === 'PENDING' ? 'bg-yellow-100' : 'bg-red-100'
                     }`}
                     whileHover={{ scale: 1.1 }}
                     transition={{ duration: 0.2 }}
                   >
                     {renderActivityIcon(activity.type)}
                   </motion.div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <p className="text-[#134B70]">{activity.text}</p>
-                      {(activity.type === 'approved' || activity.type === 'APPROVED') && (
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start mb-1">
+                      <h4 className="text-[#134B70] font-medium truncate pr-2">
+                        {activity.text}
+                      </h4>
+                      {activity.type === 'APPROVED' && activity.points > 0 && (
                         <motion.span 
-                          className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded"
+                          className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap"
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
                           transition={{ delay: 0.5 + index * 0.1, duration: 0.3 }}
@@ -566,14 +675,32 @@ const Dashboard = () => {
                         </motion.span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">{activity.date}</p>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Status: <span className={`font-medium ${
+                        activity.type === 'APPROVED' ? 'text-green-600' :
+                        activity.type === 'PENDING' ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {getStatusText(activity.status)}
+                      </span>
+                    </p>
+                    <p className="text-xs text-gray-500">{activity.date}</p>
                   </div>
                 </motion.div>
               ))}
             </div>
           ) : (
-            <div className="p-6 text-center text-gray-500">
-              <p>Belum ada aktivitas terbaru.</p>
+            <div className="p-8 text-center text-gray-500 bg-white/40 rounded-lg">
+              <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <p className="text-lg font-medium mb-2">Belum ada aktivitas</p>
+              <p className="text-sm">Mulai dengan mengajukan kegiatan pertama Anda!</p>
+              <Link 
+                to="/submit-activity" 
+                className="mt-4 inline-flex items-center px-4 py-2 bg-[#201E43] text-white rounded-lg hover:bg-[#201E43]/80 transition-colors duration-200"
+              >
+                Ajukan Kegiatan
+              </Link>
             </div>
           )}
           <motion.div
@@ -581,8 +708,8 @@ const Dashboard = () => {
             whileTap={{ scale: 0.98 }}
             transition={{ duration: 0.2 }}
           >
-            <Link to="/activity-history" className="mt-4 block w-full py-2 bg-[#201E43]/10 hover:bg-[#201E43]/20 rounded-lg text-[#201E43] font-medium transition-colors duration-200 text-center">
-              Lihat Semua Aktivitas
+            <Link to="/activity-history" className="mt-4 block w-full py-3 bg-[#201E43]/10 hover:bg-[#201E43]/20 rounded-lg text-[#201E43] font-medium transition-colors duration-200 text-center">
+              Lihat Semua Riwayat Aktivitas
             </Link>
           </motion.div>
         </motion.section>
@@ -597,6 +724,11 @@ const Dashboard = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-[#134B70] text-sm mb-4 md:mb-0">© 2025 TIF Point - Teknik Informatika UIN Suska Riau</p>
+            <div className="flex items-center space-x-4 text-sm text-[#134B70]/80">
+              <span>Build v1.2.0</span>
+              <span>•</span>
+              <span>API Status: {error ? 'Offline' : 'Online'}</span>
+            </div>
           </div>
         </div>
       </motion.footer>
