@@ -1,16 +1,17 @@
 import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Profile from './pages/Profile';
-import Dashboard from './pages/Dashboard';
-import ActivitiesInfo from './pages/ActivitiesInfo';
-import ActivityHistory from './pages/ActivityHistory';
-import SubmitActivity from './pages/SubmitActivity';
-import Competencies from './pages/Competencies';
-import AdminDashboard from './pages/AdminDashboard';
-import Settings from './pages/Settings';
+import Home from './pages/users/Home';
+import Login from './pages/users/Login';
+import Register from './pages/users/Register';
+import Profile from './pages/users/Profile';
+import Dashboard from './pages/users/Dashboard';
+import ActivitiesInfo from './pages/users/ActivitiesInfo';
+import ActivityHistory from './pages/users/ActivityHistory';
+import SubmitActivity from './pages/users/SubmitActivity';
+import Competencies from './pages/users/Competencies';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import Settings from './pages/users/Settings';
+import ForgotPassword from './pages/users/ForgotPassword';
 // Layout component with the main navbar
 const MainLayout = () => {
   return (
@@ -29,6 +30,7 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/register" element={<Register />} />
         </Route>
         

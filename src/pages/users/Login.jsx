@@ -14,10 +14,6 @@ const Login = () => {
 
   useEffect(() => {
     setIsPageLoaded(true);
-    
-    // Tidak perlu mengecek token di sini, biarkan user login terlebih dahulu
-    // Jika ingin redirect pengguna yang sudah login, sebaiknya lakukan di komponen
-    // level lebih tinggi seperti App.js atau dengan Protected Routes
   }, []);
 
   const handleSubmit = async (e) => {
@@ -42,10 +38,8 @@ const Login = () => {
       
       console.log('Login successful:', data);
       
-      // Store the token in localStorage
       localStorage.setItem('token', data.token);
       
-      // Store complete user data
       if (data.user) {
         localStorage.setItem('userData', JSON.stringify({
           id: data.user.id,
@@ -56,7 +50,6 @@ const Login = () => {
           role: data.user.role
         }));
         
-        // Redirect berdasarkan role - case insensitive check
         if (data.user.role && data.user.role.toUpperCase() === 'ADMIN') {
           console.log('Admin user detected, redirecting to admin dashboard');
           navigate('/admin-dashboard');
@@ -65,7 +58,6 @@ const Login = () => {
           navigate('/dashboard');
         }
       } else {
-        // Fallback jika tidak ada data user
         navigate('/dashboard');
       }
     } catch (err) {
@@ -214,7 +206,7 @@ const Login = () => {
               </label>
             </div>
             <div className="text-xs sm:text-sm">
-              <Link to="#" className="font-medium text-[#EEEEEE] hover:text-[#508C9B] transition poppins-font">
+              <Link to="/forgot-password" className="font-medium text-[#EEEEEE] hover:text-[#508C9B] transition poppins-font">
                 Lupa kata sandi?
               </Link>
             </div>

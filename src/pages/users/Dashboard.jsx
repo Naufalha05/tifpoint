@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import DashboardNavbar from './components/DashboardNavbar';
+import DashboardNavbar from '../components/DashboardNavbar';
 
 const Dashboard = () => {
   const [isLoaded, setIsLoaded] = useState(false);
