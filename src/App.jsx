@@ -12,6 +12,8 @@ import Competencies from './pages/users/Competencies';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Settings from './pages/users/Settings';
 import ForgotPassword from './pages/users/ForgotPassword';
+import Leaderboard from './pages/users/Leaderboard';
+import ResetPassword from './pages/users/ResetPassword';
 // Layout component with the main navbar
 const MainLayout = () => {
   return (
@@ -31,6 +33,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/register" element={<Register />} />
         </Route>
         
@@ -41,6 +44,7 @@ function App() {
         <Route path="/activity-history" element={<ActivityHistory />} />
         <Route path="/submit-activity" element={<SubmitActivity />} />
         <Route path="/competencies" element={<Competencies />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
