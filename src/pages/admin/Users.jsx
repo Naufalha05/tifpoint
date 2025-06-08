@@ -3,9 +3,9 @@ import {
   Search, 
   RefreshCw,
   Trash,
-  AlertCircle,
   XCircle
 } from 'lucide-react';
+import DeleteUser from './DeleteUser';
 
 export default function Users({ showSuccessNotification }) {
   const [users, setUsers] = useState([]);
@@ -15,25 +15,37 @@ export default function Users({ showSuccessNotification }) {
   const [error, setError] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Modal states for users
+  // Modal states for delete
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
-  // Base API URL
-  const API_BASE_URL = 'https://tifpoint-production.up.railway.app/api';
+  // Base API URL for users list
+  const API_BASE_URL = 'https://tifpoint-production.up.railway.app/api/users';
 
   // Function to manually refresh data
   const refreshData = () => {
     setRefreshTrigger(prev => prev + 1);
   };
 
-  // Get auth headers
+  // Get auth headers with enhanced validation
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
+    
+    if (!token || token.trim() === '') {
+      throw new Error('Token tidak ditemukan. Silakan login kembali.');
+    }
+
     return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Authorization': `Bearer ${token.trim()}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
     };
+  };
+
+  // Check if user is authenticated
+  const isAuthenticated = () => {
+    const token = localStorage.getItem('token');
+    return token && token.trim() !== '';
   };
 
   // Fetch users from API
@@ -52,8 +64,8 @@ export default function Users({ showSuccessNotification }) {
         
         const headers = getAuthHeaders();
 
-        // Fetch users (admin only)
-        const usersResponse = await fetch(`${API_BASE_URL}/users`, {
+        // Fetch users (admin only) - endpoint khusus untuk list users
+        const usersResponse = await fetch(API_BASE_URL, {
           method: 'GET',
           headers
         });
@@ -61,9 +73,17 @@ export default function Users({ showSuccessNotification }) {
         let usersData = [];
         if (usersResponse.ok) {
           usersData = await usersResponse.json();
+        } else if (usersResponse.status === 401) {
+          setError('Sesi login telah berakhir. Silakan login kembali.');
+          setLoading(false);
+          return;
+        } else if (usersResponse.status === 403) {
+          setError('Anda tidak memiliki izin untuk mengakses data pengguna');
+          setLoading(false);
+          return;
         } else {
-          console.warn('Failed to fetch users - might not have admin permissions');
-          throw new Error('Anda tidak memiliki izin untuk mengakses data pengguna');
+          const errorData = await usersResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Gagal memuat data pengguna');
         }
 
         const transformedUsers = Array.isArray(usersData)
@@ -99,46 +119,64 @@ export default function Users({ showSuccessNotification }) {
       const filtered = users.filter(user => 
         (user.nim && user.nim.toLowerCase().includes(searchQuery.toLowerCase())) ||
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase())
+        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.username.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredUsers(filtered);
     }
   }, [searchQuery, users]);
 
-  // Delete user
-  const handleDeleteConfirm = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch(`${API_BASE_URL}/users/${itemToDelete.id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gagal menghapus pengguna: ${errorText}`);
-      }
-      
-      setIsDeleteModalOpen(false);
-      setItemToDelete(null);
-      setLoading(false);
-      showSuccessNotification('Pengguna berhasil dihapus!');
-      refreshData();
-      
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      setError(error.message || 'Gagal menghapus pengguna');
-      setLoading(false);
+  // Open delete modal with validation
+  const openDeleteModal = (user) => {
+    setError(null);
+    
+    // Check authentication first
+    if (!isAuthenticated()) {
+      setError('Sesi login telah berakhir. Silakan login kembali.');
+      return;
     }
+    
+    // Additional validation
+    if (user.role === 'ADMIN') {
+      setError('Tidak dapat menghapus pengguna dengan role admin.');
+      return;
+    }
+    
+    // Validate user ID
+    if (!user.id) {
+      setError('ID pengguna tidak valid.');
+      return;
+    }
+    
+    setItemToDelete(user);
+    setIsDeleteModalOpen(true);
   };
 
-  // Open delete modal
-  const openDeleteModal = (item) => {
-    setError(null);
-    setItemToDelete(item);
-    setIsDeleteModalOpen(true);
+  // Close delete modal
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setItemToDelete(null);
+  };
+
+  // Handle successful delete - callback from DeleteUser component
+  const handleDeleteSuccess = (deletedUserId, message) => {
+    // Update local state immediately for better UX
+    setUsers(prevUsers => prevUsers.filter(user => user.id !== deletedUserId));
+    setFilteredUsers(prevFiltered => prevFiltered.filter(user => user.id !== deletedUserId));
+    
+    // Close modal
+    setIsDeleteModalOpen(false);
+    setItemToDelete(null);
+    
+    // Show success message
+    if (showSuccessNotification) {
+      showSuccessNotification(message);
+    }
+    
+    // Optional: refresh data to ensure consistency
+    setTimeout(() => {
+      refreshData();
+    }, 1000);
   };
 
   return (
@@ -148,16 +186,17 @@ export default function Users({ showSuccessNotification }) {
           <h2 className="text-lg font-semibold">Manajemen Data Pengguna</h2>
           <button 
             onClick={refreshData}
-            className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 transform hover:scale-105"
+            disabled={loading}
+            className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
         </div>
         <div className="mt-4 relative">
           <input
             type="text"
-            placeholder="Cari berdasarkan NIM, nama, atau email..."
+            placeholder="Cari berdasarkan NIM, nama, email, atau username..."
             className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 focus:scale-105"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -184,7 +223,7 @@ export default function Users({ showSuccessNotification }) {
       {loading ? (
         <div className="flex justify-center items-center p-8">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          <p className="ml-3 text-gray-600 animate-pulse">Memuat data...</p>
+          <p className="ml-3 text-gray-600 animate-pulse">Memuat data pengguna...</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -217,14 +256,16 @@ export default function Users({ showSuccessNotification }) {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.role !== 'ADMIN' && (
+                      {user.role !== 'ADMIN' ? (
                         <button 
                           onClick={() => openDeleteModal(user)}
-                          className="text-red-600 hover:text-red-900 transition-all duration-200 transform hover:scale-110"
+                          className="text-red-600 hover:text-red-900 transition-all duration-200 transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Hapus User"
                         >
                           <Trash className="h-5 w-5" />
                         </button>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Protected</span>
                       )}
                     </td>
                   </tr>
@@ -241,61 +282,17 @@ export default function Users({ showSuccessNotification }) {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete User Modal Component */}
       {isDeleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 animate-fadeIn">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 transform transition-all duration-300 animate-slideInUp">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
-                Konfirmasi Hapus
-              </h3>
-            </div>
-            <div className="px-6 py-4">
-              <p className="text-sm text-gray-500">
-                Apakah Anda yakin ingin menghapus pengguna ini?
-                <br />
-                <span className="font-semibold">
-                  {itemToDelete.username || 'Unknown'}
-                </span>
-              </p>
-              <p className="text-sm text-red-500 mt-2">
-                Tindakan ini tidak dapat dibatalkan.
-              </p>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 transform hover:scale-105"
-                disabled={loading}
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200 transform hover:scale-105"
-                disabled={loading}
-              >
-                {loading ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                    Menghapus...
-                  </div>
-                ) : (
-                  'Hapus'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteUser
+          user={itemToDelete}
+          isOpen={isDeleteModalOpen}
+          onClose={closeDeleteModal}
+          onDeleteSuccess={handleDeleteSuccess}
+        />
       )}
 
       <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
         @keyframes slideInUp {
           from { 
             opacity: 0;
@@ -316,10 +313,6 @@ export default function Users({ showSuccessNotification }) {
             opacity: 1;
             transform: translateY(0);
           }
-        }
-        
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
         }
         
         .animate-slideInUp {

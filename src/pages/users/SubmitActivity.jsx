@@ -31,6 +31,43 @@ const SubmitActivity = () => {
   // Base URL for API - Mixed endpoints (some with /api prefix, some without)
   const API_BASE_URL = 'https://tifpoint-production.up.railway.app/api';
 
+  // Function to remove duplicates from arrays based on id
+  const removeDuplicates = (array, key = 'id') => {
+    if (!Array.isArray(array)) return [];
+    
+    const seen = new Set();
+    return array.filter(item => {
+      if (!item || typeof item !== 'object') return false;
+      
+      const identifier = item[key];
+      if (seen.has(identifier)) {
+        return false;
+      }
+      seen.add(identifier);
+      return true;
+    });
+  };
+
+  // Debug function to check for duplicates
+  const debugDuplicates = (data, name) => {
+    if (!Array.isArray(data)) return;
+    
+    const ids = data.map(item => item.id);
+    const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+    
+    if (duplicateIds.length > 0) {
+      console.warn(`Duplicates found in ${name}:`, duplicateIds);
+      console.table(data.filter(item => duplicateIds.includes(item.id)));
+    }
+    
+    const names = data.map(item => item.name);
+    const duplicateNames = names.filter((name, index) => names.indexOf(name) !== index);
+    
+    if (duplicateNames.length > 0) {
+      console.warn(`Duplicate names found in ${name}:`, duplicateNames);
+    }
+  };
+
   // Animation effect when component mounts
   useEffect(() => {
     setIsLoaded(true);
@@ -83,11 +120,17 @@ const SubmitActivity = () => {
       }
 
       const eventsData = await response.json();
-      setEvents(eventsData);
-      console.log('Events loaded:', eventsData);
+      
+      // Remove duplicates and debug
+      const uniqueEvents = removeDuplicates(eventsData, 'id');
+      debugDuplicates(eventsData, 'events');
+      
+      setEvents(uniqueEvents);
+      console.log('Events loaded:', uniqueEvents);
     } catch (error) {
       console.error('Error loading events:', error);
       // Don't throw error, just log it as events are optional
+      setEvents([]);
     } finally {
       setLoadingEvents(false);
     }
@@ -109,17 +152,23 @@ const SubmitActivity = () => {
       }
 
       const competenciesData = await response.json();
-      setCompetencies(competenciesData);
-      console.log('Competencies loaded:', competenciesData);
+      
+      // Remove duplicates and debug
+      const uniqueCompetencies = removeDuplicates(competenciesData, 'id');
+      debugDuplicates(competenciesData, 'competencies');
+      
+      setCompetencies(uniqueCompetencies);
+      console.log('Competencies loaded:', uniqueCompetencies);
     } catch (error) {
       console.error('Error loading competencies:', error);
       // Fallback to static data if API fails
-      setCompetencies([
+      const fallbackCompetencies = [
         { id: 'software-dev', name: 'Software Developer' },
-        { id: 'network', name: 'Network' },
+        { id: 'network', name: 'Network Technology' },
         { id: 'ai', name: 'Artificial Intelligence' },
         { id: 'softskills', name: 'Soft Skills' }
-      ]);
+      ];
+      setCompetencies(fallbackCompetencies);
     }
   };
 
@@ -139,18 +188,24 @@ const SubmitActivity = () => {
       }
 
       const activityTypesData = await response.json();
-      setActivityTypesData(activityTypesData);
-      console.log('Activity Types loaded:', activityTypesData);
+      
+      // Remove duplicates and debug
+      const uniqueActivityTypes = removeDuplicates(activityTypesData, 'id');
+      debugDuplicates(activityTypesData, 'activityTypes');
+      
+      setActivityTypesData(uniqueActivityTypes);
+      console.log('Activity Types loaded:', uniqueActivityTypes);
     } catch (error) {
       console.error('Error loading activity types:', error);
       // Fallback to static data if API fails
-      setActivityTypesData([
+      const fallbackActivityTypes = [
         { id: 'seminar', name: 'Seminar', points: '2-4' },
         { id: 'course', name: 'Kursus', points: '4-8' },
         { id: 'program', name: 'Program', points: '5-10' },
         { id: 'research', name: 'Riset', points: '8-12' },
         { id: 'achievement', name: 'Prestasi', points: '6-15' }
-      ]);
+      ];
+      setActivityTypesData(fallbackActivityTypes);
     }
   };
 
@@ -170,8 +225,13 @@ const SubmitActivity = () => {
       }
 
       const recognizedCoursesData = await response.json();
-      setRecognizedCourses(recognizedCoursesData);
-      console.log('Recognized Courses loaded:', recognizedCoursesData);
+      
+      // Remove duplicates and debug
+      const uniqueRecognizedCourses = removeDuplicates(recognizedCoursesData, 'id');
+      debugDuplicates(recognizedCoursesData, 'recognizedCourses');
+      
+      setRecognizedCourses(uniqueRecognizedCourses);
+      console.log('Recognized Courses loaded:', uniqueRecognizedCourses);
     } catch (error) {
       console.error('Error loading recognized courses:', error);
       // Set empty array if API fails (recognized courses are optional)
@@ -842,7 +902,7 @@ const SubmitActivity = () => {
               {loadingEvents ? (
                 <option value="">Memuat daftar event...</option>
               ) : (
-                events.map(event => (
+                removeDuplicates(events, 'id').map(event => (
                   <option key={event.id} value={event.id}>
                     {event.title} - {event.pointValue} poin ({new Date(event.date).toLocaleDateString()})
                   </option>
@@ -874,7 +934,7 @@ const SubmitActivity = () => {
               disabled={loadingData}
             >
               <option value="">Tidak terkait kursus terakreditasi</option>
-              {recognizedCourses.map(course => (
+              {removeDuplicates(recognizedCourses, 'id').map(course => (
                 <option key={course.id} value={course.id}>
                   {course.name} - {course.provider} ({course.pointValue} poin)
                 </option>
@@ -929,7 +989,7 @@ const SubmitActivity = () => {
               disabled={loadingData}
             >
               <option value="" disabled>Pilih jenis kegiatan</option>
-              {activityTypesData.map(type => (
+              {removeDuplicates(activityTypesData, 'id').map(type => (
                 <option key={type.id} value={type.id}>
                   {type.name} {type.points && `(Estimasi: ${type.points} poin)`}
                 </option>
@@ -982,7 +1042,7 @@ const SubmitActivity = () => {
                 disabled={loadingData}
               >
                 <option value="" disabled>Pilih area kompetensi</option>
-                {competencies.map(competency => (
+                {removeDuplicates(competencies, 'id').map(competency => (
                   <option key={competency.id} value={competency.id}>{competency.name}</option>
                 ))}
               </select>

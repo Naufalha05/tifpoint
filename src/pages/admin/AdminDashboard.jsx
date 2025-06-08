@@ -259,6 +259,14 @@ export default function AdminDashboard() {
     setActiveTab('verification');
   };
 
+  // Helper function to calculate bar height for charts
+  const calculateBarHeight = (value, total, maxHeight = 160) => {
+    if (total === 0 || value === 0) return 20; // minimum height
+    const percentage = (value / total);
+    const height = Math.max(20, percentage * maxHeight); // minimum 20px
+    return Math.min(height, maxHeight); // maximum based on container
+  };
+
   // Render dashboard content
   const renderDashboardContent = () => {
     const pendingSubmissions = submissions || [];
@@ -423,7 +431,7 @@ export default function AdminDashboard() {
           </div>
         </div>
         
-        {/* Student Progress Chart */}
+        {/* Student Progress Chart - FIXED */}
         <div className={`bg-white rounded-lg shadow p-6 transform transition-all duration-500 hover:shadow-lg ${
           Date.now() - chartUpdateTime < 2000 ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
         }`} key={`student-chart-${chartUpdateTime}`}>
@@ -437,44 +445,38 @@ export default function AdminDashboard() {
           </div>
           <div className="h-64 flex items-center justify-center">
             <div className="w-full max-w-lg">
-              <div className="flex justify-between items-end h-40 mt-4">
-                <div className="w-1/3 mx-1">
+              <div className="flex justify-between items-end h-40 mt-4" style={{ height: '160px' }}>
+                <div className="w-1/3 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-green-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalStudents > 0 ? (stats.completedStudents / stats.totalStudents) * 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0s'
+                      height: `${calculateBarHeight(stats.completedStudents, Math.max(stats.totalStudents, stats.completedStudents, stats.inProgressStudents, stats.notStartedStudents))}px`
                     }}
                     key={`green-bar-${chartUpdateTime}-${stats.completedStudents}`}
                   ></div>
                   <p className="text-xs text-center mt-2">Lulus ({stats.completedStudents})</p>
                 </div>
-                <div className="w-1/3 mx-1">
+                <div className="w-1/3 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-blue-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalStudents > 0 ? (stats.inProgressStudents / stats.totalStudents) * 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0.2s'
+                      height: `${calculateBarHeight(stats.inProgressStudents, Math.max(stats.totalStudents, stats.completedStudents, stats.inProgressStudents, stats.notStartedStudents))}px`
                     }}
                     key={`blue-bar-${chartUpdateTime}-${stats.inProgressStudents}`}
                   ></div>
                   <p className="text-xs text-center mt-2">Berjalan ({stats.inProgressStudents})</p>
                 </div>
-                <div className="w-1/3 mx-1">
+                <div className="w-1/3 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-gray-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalStudents > 0 ? (stats.notStartedStudents / stats.totalStudents) * 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0.4s'
+                      height: `${calculateBarHeight(stats.notStartedStudents, Math.max(stats.totalStudents, stats.completedStudents, stats.inProgressStudents, stats.notStartedStudents))}px`
                     }}
                     key={`gray-bar-${chartUpdateTime}-${stats.notStartedStudents}`}
                   ></div>
@@ -498,7 +500,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Activity Statistics Chart */}
+        {/* Activity Statistics Chart - FIXED */}
         <div className={`bg-white rounded-lg shadow p-6 transform transition-all duration-500 hover:shadow-lg ${
           Date.now() - chartUpdateTime < 2000 ? 'ring-2 ring-green-500 ring-opacity-50' : ''
         }`} key={`activity-chart-${chartUpdateTime}`}>
@@ -512,58 +514,50 @@ export default function AdminDashboard() {
           </div>
           <div className="h-64 flex items-center justify-center">
             <div className="w-full max-w-lg">
-              <div className="flex justify-between items-end h-40 mt-4">
-                <div className="w-1/4 mx-1">
+              <div className="flex justify-between items-end h-40 mt-4" style={{ height: '160px' }}>
+                <div className="w-1/4 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-blue-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalSubmissions > 0 ? 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0s'
+                      height: `${calculateBarHeight(stats.totalSubmissions, stats.totalSubmissions)}px`
                     }}
                     key={`total-bar-${chartUpdateTime}-${stats.totalSubmissions}`}
                   ></div>
                   <p className="text-xs text-center mt-2">Total ({stats.totalSubmissions})</p>
                 </div>
-                <div className="w-1/4 mx-1">
+                <div className="w-1/4 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-green-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalSubmissions > 0 ? (stats.approvedSubmissions / stats.totalSubmissions) * 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0.2s'
+                      height: `${calculateBarHeight(stats.approvedSubmissions, stats.totalSubmissions)}px`
                     }}
                     key={`approved-bar-${chartUpdateTime}-${stats.approvedSubmissions}`}
                   ></div>
                   <p className="text-xs text-center mt-2">Disetujui ({stats.approvedSubmissions})</p>
                 </div>
-                <div className="w-1/4 mx-1">
+                <div className="w-1/4 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-yellow-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalSubmissions > 0 ? (stats.pendingSubmissions / stats.totalSubmissions) * 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0.4s'
+                      height: `${calculateBarHeight(stats.pendingSubmissions, stats.totalSubmissions)}px`
                     }}
                     key={`pending-bar-${chartUpdateTime}-${stats.pendingSubmissions}`}
                   ></div>
                   <p className="text-xs text-center mt-2">Pending ({stats.pendingSubmissions})</p>
                 </div>
-                <div className="w-1/4 mx-1">
+                <div className="w-1/4 mx-1 flex flex-col justify-end h-full">
                   <div 
                     className={`bg-red-500 rounded-t-lg w-full transition-all duration-1000 ease-out ${
                       Date.now() - chartUpdateTime < 3000 ? 'animate-pulse' : ''
                     }`}
                     style={{ 
-                      height: `${stats.totalSubmissions > 0 ? (stats.rejectedSubmissions / stats.totalSubmissions) * 100 : 10}%`, 
-                      minHeight: '20px',
-                      animationDelay: '0.6s'
+                      height: `${calculateBarHeight(stats.rejectedSubmissions, stats.totalSubmissions)}px`
                     }}
                     key={`rejected-bar-${chartUpdateTime}-${stats.rejectedSubmissions}`}
                   ></div>
