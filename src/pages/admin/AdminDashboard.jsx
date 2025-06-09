@@ -11,7 +11,9 @@ import {
   CalendarDays,
   Award,
   AlertCircle,
-  Check
+  Check,
+  Star,
+  Activity
 } from 'lucide-react';
 
 // Import komponen-komponen terpisah
@@ -19,6 +21,8 @@ import Event from './Event';
 import RecognizedCourse from './RecognizedCourse';
 import Users from './Users';
 import SubmissionVerification from './SubmissionVerification';
+import Competencies from './Competencies';
+import ActivityType from './ActivityType';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -706,6 +710,10 @@ export default function AdminDashboard() {
         return <Event showSuccessNotification={showSuccessNotification} />;
       case 'courses':
         return <RecognizedCourse showSuccessNotification={showSuccessNotification} />;
+      case 'competencies':
+        return <Competencies showSuccessNotification={showSuccessNotification} />;
+      case 'activity-types':
+        return <ActivityType showSuccessNotification={showSuccessNotification} />;
       default:
         return renderDashboardContent();
     }
@@ -794,6 +802,30 @@ export default function AdminDashboard() {
               >
                 <Award className="mr-3 h-5 w-5" />
                 Kursus Terakreditasi
+              </button>
+
+              <button
+                onClick={() => setActiveTab('competencies')}
+                className={`${
+                  activeTab === 'competencies'
+                    ? 'bg-gray-900 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                } group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full transition-all duration-200 transform hover:scale-105`}
+              >
+                <Star className="mr-3 h-5 w-5" />
+                Manajemen Kompetensi
+              </button>
+
+              <button
+                onClick={() => setActiveTab('activity-types')}
+                className={`${
+                  activeTab === 'activity-types'
+                    ? 'bg-gray-900 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                } group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full transition-all duration-200 transform hover:scale-105`}
+              >
+                <Activity className="mr-3 h-5 w-5" />
+                Jenis Aktivitas
               </button>
             </nav>
           </div>
