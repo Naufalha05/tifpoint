@@ -247,6 +247,9 @@ const Dashboard = () => {
     }
   };
 
+  // Check if target is reached
+  const isTargetReached = userData.totalPoints >= userData.targetPoints || userData.isCompleted || userData.remainingPoints <= 0;
+
   // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -467,8 +470,11 @@ const Dashboard = () => {
                   )}
                 </motion.h4>
                 <p className="text-gray-600">Target minimum untuk lulus: {userData.targetPoints} point</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Sisa {userData.remainingPoints} point lagi untuk mencapai target
+                <p className={`text-sm mt-1 ${isTargetReached ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                  {isTargetReached 
+                    ? "Point Anda telah mencapai target" 
+                    : `Sisa ${userData.remainingPoints} point lagi untuk mencapai target`
+                  }
                 </p>
               </div>
               <motion.div
